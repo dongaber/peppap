@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let store = SessionStore()
     private let scanner = UsageScanner()
     private let settings = SettingsWindow()
+    private let onboarding = OnboardingWindow()
     private var server: EventServer?
     private var notch: NotchController!
     private var hotKey: HotKey?
@@ -40,6 +41,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         server.debugState = { [weak self] in self?.store.debugDescription ?? "" }
         server.debugCommand = { [weak self] path in
             guard let self else { return "" }
+            if path.hasPrefix("/demo-shot-onboarding") {
+                // Снимок окна приветствия (нужно разрешение на запись экрана).
+                self.showOnboarding()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    guard let id = self.onboarding.windowNumber else { return }
+                    let out = DemoRecorder.outputURL.deletingLastPathComponent().appendingPathComponent("onboarding.png")
+                    let p = Process()
+                    p.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                    p.arguments = ["-x", "-o", "-l", "\(id)", out.path]
+                    try? p.run()
+                }
+                return "ok\n"
+            }
             if self.demo.isRunning { return "already running\n" }
             if path.hasPrefix("/demo-record") && !CGPreflightScreenCaptureAccess() {
                 CGRequestScreenCaptureAccess()
@@ -62,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.hotKey = hotKey
 
         setupStatusItem()
+        if OnboardingWindow.shouldShow(hooksInstalled: store.hooksInstalled) { showOnboarding() }
         refreshUsage()
         watchProcesses()
         timers.append(Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
@@ -180,10 +195,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Hooks
 
-    private func installHooks() {
+    private func installHooks(quiet: Bool = false) {
         do {
             try HookInstaller.install()
             store.hooksInstalled = true
+            if quiet { return } // окно приветствия само показывает «Подключено»
             alert(L("Hooks connected", "Hooks подключены"),
                   L("Peppap was added to ~/.claude/settings.json (backup: settings.json.peppap-backup). "
                     + "Running Claude Code sessions pick up the change after a restart.",
@@ -231,6 +247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             installed ? #selector(menuUninstallHooks) : #selector(menuInstallHooks))
         add(menu, L("Notification sound", "Звук уведомлений"), #selector(toggleSound), on: Prefs.sound)
         add(menu, L("Settings…", "Настройки…"), #selector(openSettings), key: ",")
+        add(menu, L("Welcome…", "Приветствие…"), #selector(showOnboarding))
         menu.addItem(.separator())
         add(menu, L("Export weekly report…", "Экспорт отчёта за неделю…"), #selector(exportReport))
         add(menu, L("Play demo", "Показать демо"), #selector(runDemo))
@@ -253,6 +270,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func menuRefresh() { refreshUsage() }
     @objc private func menuOpenNotch() { notch.toggleFromHotKey() }
     @objc private func quit() { NSApp.terminate(nil) }
+
+    @objc private func showOnboarding() {
+        onboarding.show(OnboardingView(
+            store: store,
+            onInstallHooks: { [weak self] in self?.installHooks(quiet: true) },
+            onPlayDemo: { [weak self] in self?.startDemo(record: false) },
+            onDone: { [weak self] in self?.onboarding.close() }
+        ))
+    }
 
     @objc private func openSettings() {
         settings.show(SettingsView(
