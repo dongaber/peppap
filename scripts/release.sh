@@ -21,6 +21,14 @@ awk -v ver="$NEW" -v date="$DATE" '
   /^## \[Unreleased\]/ { print; print ""; print "## [" ver "] — " date; next }
   { print }
 ' CHANGELOG.md > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
+# Ссылки внизу: [Unreleased] сравнивается с новым тегом, у новой версии — ссылка на релиз.
+REPO_URL=$(sed -n 's#^\[Unreleased\]: \(https://github.com/[^/]*/[^/]*\)/compare/.*#\1#p' CHANGELOG.md)
+if [ -n "$REPO_URL" ]; then
+  awk -v ver="$NEW" -v url="$REPO_URL" '
+    /^\[Unreleased\]: / { print "[Unreleased]: " url "/compare/v" ver "...HEAD"; print "[" ver "]: " url "/releases/tag/v" ver; next }
+    { print }
+  ' CHANGELOG.md > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
+fi
 echo "$NEW" > VERSION
 
 git add VERSION CHANGELOG.md
