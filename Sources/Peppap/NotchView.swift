@@ -39,11 +39,13 @@ struct NotchActions {
     var installHooks: () -> Void
     var rename: (ClaudeSession) -> Void
     var send: (ClaudeSession, String) -> Void
+    var installUpdate: () -> Void
 }
 
 struct NotchView: View {
     @ObservedObject var store: SessionStore
     @ObservedObject var ui: NotchUIState
+    @ObservedObject var updater: Updater
     let actions: NotchActions
 
     /// Смена языка пересобирает интерфейс целиком.
@@ -69,7 +71,7 @@ struct NotchView: View {
 
     @ViewBuilder private var content: some View {
         if ui.isExpanded {
-            ExpandedView(store: store, ui: ui, actions: actions)
+            ExpandedView(store: store, ui: ui, updater: updater, actions: actions)
                 .frame(width: max(540, ui.notchWidth + 330))
                 // Фигура растягивается пружиной, содержимое проявляется чуть позже и быстро гаснет при закрытии.
                 .transition(.asymmetric(
@@ -161,6 +163,7 @@ private struct Badge: View {
 private struct ExpandedView: View {
     @ObservedObject var store: SessionStore
     @ObservedObject var ui: NotchUIState
+    @ObservedObject var updater: Updater
     let actions: NotchActions
 
     var body: some View {
@@ -194,6 +197,9 @@ private struct ExpandedView: View {
     @ViewBuilder private var sessionsTab: some View {
         if !store.hooksInstalled {
             HooksBanner(action: actions.installHooks)
+        }
+        if let release = updater.available {
+            UpdateBanner(version: release.version, installing: updater.installing, action: actions.installUpdate)
         }
         if store.visibleSessions.isEmpty {
             Text(L("No active sessions. Run `claude` in a terminal.", "Нет активных сессий. Запустите `claude` в терминале."))
@@ -264,6 +270,28 @@ private struct HooksBanner: View {
             Button(L("Connect", "Подключить"), action: action)
                 .buttonStyle(NotchButtonStyle(prominent: true))
                 .controlSize(.small)
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.claude.opacity(0.15)))
+    }
+}
+
+private struct UpdateBanner: View {
+    let version: String
+    let installing: Bool
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.down.circle.fill").foregroundStyle(Color.claude)
+            Text(L("Peppap \(version) is available", "Доступна версия Peppap \(version)"))
+                .font(.system(size: 12)).foregroundStyle(Ink.primary.opacity(0.85))
+            Spacer()
+            if installing {
+                ProgressView().controlSize(.small)
+            } else {
+                Button(L("Update", "Обновить"), action: action).buttonStyle(NotchButtonStyle(prominent: true))
+            }
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.claude.opacity(0.15)))

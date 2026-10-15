@@ -54,7 +54,7 @@ final class NotchController {
     /// Сценарий демо управляет челкой сам — наведение мыши игнорируется.
     var scripted = false
 
-    init(store: SessionStore, actions: NotchActions) {
+    init(store: SessionStore, updater: Updater, actions: NotchActions) {
         self.store = store
         self.actions = actions
         panel = NotchPanel(contentRect: NSRect(origin: .zero, size: Self.panelSize),
@@ -70,7 +70,7 @@ final class NotchController {
         panel.ignoresMouseEvents = true
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
 
-        let root = NotchView(store: store, ui: ui, actions: actions)
+        let root = NotchView(store: store, ui: ui, updater: updater, actions: actions)
             .frame(width: Self.panelSize.width, height: Self.panelSize.height, alignment: .top)
         let host = FirstMouseHostingView(rootView: root)
         host.sizingOptions = []

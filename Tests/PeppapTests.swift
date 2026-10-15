@@ -15,6 +15,7 @@ enum PeppapTests {
             ("HookInstaller", hookInstallerTests),
             ("Report", reportTests),
             ("L10n", l10nTests),
+            ("Updater", updaterTests),
         ])
     }
 }
@@ -366,5 +367,18 @@ let l10nTests: [(String, @MainActor () throws -> Void)] = [
         let info = StatusInfo(json: try JSONSerialization.data(withJSONObject: json))!
         withLanguage(.en) { expectEqual(info.line, "context 40% · week 12%") }
         withLanguage(.ru) { expectEqual(info.line, "контекст 40% · неделя 12%") }
+    }),
+]
+
+// MARK: - Updater
+
+let updaterTests: [(String, @MainActor () throws -> Void)] = [
+    ("сравнение версий", {
+        expect(Updater.isNewer("0.4.0", than: "0.3.0"))
+        expect(Updater.isNewer("0.10.0", than: "0.9.9"))
+        expect(Updater.isNewer("1.0", than: "0.99.1"))
+        expect(!Updater.isNewer("0.3.0", than: "0.3.0"))
+        expect(!Updater.isNewer("0.3", than: "0.3.0"))
+        expect(!Updater.isNewer("0.2.9", than: "0.3.0"))
     }),
 ]

@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let scanner = UsageScanner()
     private let settings = SettingsWindow()
     private let onboarding = OnboardingWindow()
+    private let updater = Updater()
     private var server: EventServer?
     private var notch: NotchController!
     private var hotKey: HotKey?
@@ -21,11 +22,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Prefs.register()
-        notch = NotchController(store: store, actions: NotchActions(
+        notch = NotchController(store: store, updater: updater, actions: NotchActions(
             select: { [weak self] s in self?.select(s) },
             installHooks: { [weak self] in self?.installHooks() },
             rename: { [weak self] s in self?.rename(s) },
-            send: { [weak self] s, text in self?.send(text, to: s) }
+            send: { [weak self] s, text in self?.send(text, to: s) },
+            installUpdate: { [weak self] in self?.installAvailableUpdate() }
         ))
         demo = DemoRecorder(store: store, notch: notch)
         HookInstaller.updateIfNeeded()
@@ -41,6 +43,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         server.debugState = { [weak self] in self?.store.debugDescription ?? "" }
         server.debugCommand = { [weak self] path in
             guard let self else { return "" }
+            if path.hasPrefix("/demo-update-check") {
+                Task { await self.updater.check(manual: true) }
+                return "checking\n"
+            }
+            if path.hasPrefix("/demo-update-status") {
+                return "current=\(Updater.currentVersion) available=\(self.updater.available?.version ?? "-") installing=\(self.updater.installing)\n"
+            }
+            if path.hasPrefix("/demo-update-install") {
+                self.installAvailableUpdate()
+                return "installing\n"
+            }
             if path.hasPrefix("/demo-shot-onboarding") {
                 // Снимок окна приветствия (нужно разрешение на запись экрана).
                 self.showOnboarding()
@@ -76,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.hotKey = hotKey
 
         setupStatusItem()
+        updater.startAutomaticChecks()
         if OnboardingWindow.shouldShow(hooksInstalled: store.hooksInstalled) { showOnboarding() }
         refreshUsage()
         watchProcesses()
@@ -233,6 +247,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.removeAllItems()
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         menu.addItem(withTitle: "Peppap \(version)", action: nil, keyEquivalent: "")
+        if let release = updater.available {
+            add(menu, L("Update to \(release.version)…", "Обновить до \(release.version)…"), #selector(menuUpdate))
+        }
         let n = store.sessions.count
         menu.addItem(withTitle: n == 0 ? L("No active sessions", "Нет активных сессий") : L("Claude Code sessions: ", "Сессий Claude Code: ") + "\(n)",
                      action: nil, keyEquivalent: "")
@@ -271,6 +288,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func menuOpenNotch() { notch.toggleFromHotKey() }
     @objc private func quit() { NSApp.terminate(nil) }
 
+    // MARK: - Обновления
+
+    @objc private func menuUpdate() {
+        if let release = updater.available { offerUpdate(release) }
+    }
+
+    private func checkForUpdatesManually() {
+        Task {
+            if let release = await updater.check(manual: true) {
+                offerUpdate(release)
+            } else {
+                alert(L("You're up to date", "Обновлений нет"),
+                      L("Peppap \(Updater.currentVersion) is the latest version.", "Peppap \(Updater.currentVersion) — последняя версия."))
+            }
+        }
+    }
+
+    private func offerUpdate(_ release: Updater.Release) {
+        notch.collapse()
+        NSApp.activate()
+        let a = NSAlert()
+        a.messageText = L("Peppap \(release.version) is available", "Доступна версия Peppap \(release.version)")
+        let notes = release.notes.count > 700 ? String(release.notes.prefix(700)) + "…" : release.notes
+        a.informativeText = L("You have \(Updater.currentVersion).", "Установлена \(Updater.currentVersion).") + "\n\n" + notes
+        a.addButton(withTitle: L("Install and Relaunch", "Установить и перезапустить"))
+        a.addButton(withTitle: L("Later", "Позже"))
+        a.addButton(withTitle: L("Release Page", "Страница релиза"))
+        a.addButton(withTitle: L("Skip This Version", "Пропустить версию"))
+        switch a.runModal() {
+        case .alertFirstButtonReturn: install(release)
+        case .alertThirdButtonReturn: NSWorkspace.shared.open(release.pageURL)
+        case NSApplication.ModalResponse(rawValue: NSApplication.ModalResponse.alertThirdButtonReturn.rawValue + 1):
+            updater.skip(release)
+        default: break
+        }
+    }
+
+    private func installAvailableUpdate() {
+        guard let release = updater.available else { return }
+        install(release)
+    }
+
+    private func install(_ release: Updater.Release) {
+        Task {
+            do {
+                try await updater.install(release)
+            } catch {
+                NSApp.activate()
+                let a = NSAlert()
+                a.messageText = L("Couldn't install the update", "Не удалось установить обновление")
+                a.informativeText = error.localizedDescription
+                a.addButton(withTitle: L("Open Release Page", "Открыть страницу релиза"))
+                a.addButton(withTitle: L("Cancel", "Отмена"))
+                if a.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(release.pageURL) }
+            }
+        }
+    }
+
     @objc private func showOnboarding() {
         onboarding.show(OnboardingView(
             store: store,
@@ -285,7 +360,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             store: store,
             onInstallHooks: { [weak self] in self?.installHooks() },
             onUninstallHooks: { [weak self] in self?.uninstallHooks() },
-            onHotKeyChange: { [weak self] preset in self?.hotKey?.set(preset) }
+            onHotKeyChange: { [weak self] preset in self?.hotKey?.set(preset) },
+            onCheckUpdates: { [weak self] in self?.checkForUpdatesManually() }
         ))
     }
 

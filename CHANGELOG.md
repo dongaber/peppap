@@ -8,6 +8,7 @@ and versions follow [SemVer](https://semver.org/).
 ### Added
 - English interface alongside Russian, with a language switch in Settings (System / English / Русский) that applies instantly.
 - Welcome window on first launch: language, one-click hook setup, permissions and tips (✦ menu → Welcome…).
+- Update check against GitHub Releases (at launch and every 12 hours) with in-app install and relaunch; can be turned off in Settings.
 - Test suite (`scripts/test.sh`) covering hook parsing, status line, diffs, usage, transcripts, session flows and settings install; runs in CI.
 
 ### Changed

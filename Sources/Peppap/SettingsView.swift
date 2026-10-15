@@ -7,6 +7,7 @@ struct SettingsView: View {
     let onInstallHooks: () -> Void
     let onUninstallHooks: () -> Void
     let onHotKeyChange: (HotKeyPreset) -> Void
+    let onCheckUpdates: () -> Void
 
     @AppStorage(Prefs.Key.sound) private var sound = true
     @AppStorage(Prefs.Key.soundDone) private var soundDone = "Glass"
@@ -25,6 +26,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.Key.haptics) private var haptics = true
     @AppStorage(Prefs.Key.quickReplies) private var quickReplies = Prefs.defaultQuickReplies
     @AppStorage(Prefs.Key.language) private var language = AppLanguage.system.rawValue
+    @AppStorage(Updater.checkKey) private var checkUpdates = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
@@ -122,6 +124,12 @@ struct SettingsView: View {
             }
 
             Section(L("System", "Система")) {
+                LabeledContent(L("Updates", "Обновления")) {
+                    HStack {
+                        Toggle(L("Check automatically", "Проверять автоматически"), isOn: $checkUpdates)
+                        Button(L("Check now", "Проверить сейчас"), action: onCheckUpdates)
+                    }
+                }
                 Toggle(L("Launch at login", "Запускать при входе в систему"), isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, on in
                         do {
