@@ -14,6 +14,7 @@ and versions follow [SemVer](https://semver.org/).
 
 ### Changed
 - “Play demo” now runs the same scenario as the demo recording.
+- README demo video and screenshots are now in English.
 
 ### Fixed
 - Change preview now lists removed lines before added ones.
