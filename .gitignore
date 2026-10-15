@@ -1,0 +1,13 @@
+# Сборка
+build/
+dist/
+.build/
+.swiftpm/
+*.o
+
+# macOS и редакторы
+.DS_Store
+.vscode/
+.idea/
+*.xcodeproj/
+xcuserdata/

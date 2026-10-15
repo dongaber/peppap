@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Сборка
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # номер сборки = число коммитов
+
+      - name: Версии инструментов
+        run: |
+          sw_vers
+          swiftc --version
+          xcrun --show-sdk-path
+
+      - name: Сборка (Apple Silicon + Intel)
+        env:
+          ARCHS: arm64 x86_64
+        run: ./build.sh
+
+      - name: Проверка бандла
+        run: |
+          lipo -info build/Peppap.app/Contents/MacOS/Peppap
+          codesign --verify --deep --strict build/Peppap.app
+          plutil -lint build/Peppap.app/Contents/Info.plist
+
+      - name: Упаковка
+        run: scripts/package.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Peppap-${{ github.sha }}
+          path: dist/*
+          retention-days: 14
