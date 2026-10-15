@@ -1,36 +1,36 @@
 # Changelog
 
-Все заметные изменения Peppap. Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
-версии — [SemVer](https://semver.org/lang/ru/).
+All notable changes to Peppap. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
 ## [0.3.0] — 2026-10-15
 
-Первый публичный релиз.
+First public release.
 
-### Статус в челке
-- Статус сессий Claude Code: работает, нужно разрешение, готово; таймер задачи и кольцо прогресса по плану.
-- Раскрытие при наведении, по горячей клавише (⌃⌥C) и автоматически при событиях; анимация в духе Dynamic Island.
-- Вкладки «Сессии», «Сегодня» и «Неделя».
+### Notch status
+- Claude Code session status: working, needs permission, done; task timer and plan progress ring.
+- Expands on hover, via hotkey (⌃⌥C) and automatically on events, with a Dynamic Island-style animation.
+- Sessions, Today and Week tabs.
 
-### Работа с Claude из челки
-- Ответ на запросы разрешений: «Разрешить», «Разрешать всегда», «Отклонить», «В терминале»; предпросмотр изменений для Edit и Write.
-- Ответы на вопросы Claude (AskUserQuestion).
-- Быстрые ответы в сессию (Terminal, iTerm2).
-- Переход к сессии: вкладка Terminal или iTerm2, окно проекта в VS Code, Cursor, Windsurf или Zed.
+### Working with Claude from the notch
+- Answer permission requests: Allow, Always allow, Deny, or hand back to the terminal; change preview for Edit and Write.
+- Answer Claude's questions (AskUserQuestion).
+- Quick replies to a session (Terminal, iTerm2).
+- Jump to a session: Terminal or iTerm2 tab, project window in VS Code, Cursor, Windsurf or Zed.
 
-### Статистика
-- Точные лимиты подписки (5 часов и неделя) и заполненность контекста из строки состояния Claude Code.
-- Токены и стоимость по ценам API для задачи, сессии, дня и недели; изменённые файлы и строки.
-- История задач, график за неделю, экспорт отчёта в Markdown.
+### Stats
+- Exact subscription limits (5-hour and weekly) and context usage from the Claude Code status line.
+- Tokens and API-price cost for the task, session, day and week; changed files and lines.
+- Task history, weekly chart, Markdown report export.
 
-### Удобство
-- Закрепление, переименование и скрытие сессий.
-- Звук и отклик трекпада; режим «не беспокоить» во время созвонов и в полноэкранном режиме.
-- Восстановление сессий после перезапуска; закрытые терминалы и прерывания (Esc) распознаются автоматически.
-- Окно настроек, автозапуск при входе в систему.
-- Запись демо-ролика для README (выдуманные данные, нейтральный фон).
+### Convenience
+- Pin, rename and hide sessions.
+- Sound and trackpad haptics; do-not-disturb during calls and in full screen.
+- Session restore after restart; closed terminals and Esc interrupts are detected automatically.
+- Settings window, launch at login.
+- Demo video recording for the README (made-up data, neutral background).
 
 [Unreleased]: https://github.com/OWNER/peppap/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/OWNER/peppap/releases/tag/v0.3.0

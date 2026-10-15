@@ -1,114 +1,117 @@
 # Peppap
 
-Статус сессий Claude Code прямо в челке MacBook.
+Claude Code session status right in your MacBook notch.
 
-![Peppap: сессии Claude Code в челке](docs/demo.gif)
+![Peppap: Claude Code sessions in the notch](docs/demo.gif)
 
-<sub>Полное видео: [docs/demo.mp4](docs/demo.mp4). В демо выдуманные проекты и данные.</sub>
+<sub>Full video: [docs/demo.mp4](docs/demo.mp4). The demo uses made-up projects and data.</sub>
 
 <table>
   <tr>
-    <td><img src="docs/screenshot-permission.png" alt="Запрос разрешения с предпросмотром изменений"></td>
-    <td><img src="docs/screenshot-today.png" alt="Вкладка «Сегодня»: лимиты и лента задач"></td>
+    <td><img src="docs/screenshot-permission.png" alt="Permission request with a change preview"></td>
+    <td><img src="docs/screenshot-today.png" alt="Today tab: usage limits and task timeline"></td>
   </tr>
 </table>
 
-- **Статус в челке.** Пока Claude работает, рядом с челкой крутится спиннер ✻, вокруг него кольцо прогресса по плану Claude, справа идёт таймер задачи.
-- **Ответ на запросы разрешений прямо из челки:** «Разрешить», «Разрешать всегда», «Отклонить», «В терминале». Если терминал сессии сейчас на переднем плане, запрос сразу уходит туда. Если не ответить, через заданное время он тоже вернётся в терминал.
-- **В строке каждой сессии:** план Claude (`TodoWrite`, `TaskCreate`) с прогрессом, заполненность контекста, число субагентов, последний ответ Claude, токены и стоимость задачи и сессии, число изменённых файлов.
-- **Вкладка «Сегодня»:** итоги дня, 5-часовое окно лимитов и лента завершённых задач.
-- **Вкладка «Неделя»:** график за 7 дней по стоимости, времени или числу задач.
-- **Горячая клавиша** (по умолчанию ⌃⌥C): открывает челку с управлением с клавиатуры. ↑↓ — выбор, ⏎ — перейти, Tab — вкладки, A/S/D/T — ответ на запрос разрешения, Esc — закрыть.
-- **Уведомления:** звук и раскрытие челки. Можно включить звук только для долгих задач. Во время созвона (когда занят микрофон) и в полноэкранном режиме уведомления не беспокоят.
-- **Переход к сессии:** вкладка Terminal или iTerm2 (по tty), окно проекта в VS Code, Cursor, Windsurf или Zed, иначе активация терминала.
-- **Точные лимиты подписки** (5 часов и неделя) и точная заполненность контекста — из строки состояния Claude Code. Если у вас была своя строка состояния, она продолжает показываться: Peppap только подсматривает данные.
-- **Предпросмотр изменений** (Edit / MultiEdit / Write) прямо в карточке разрешения.
-- **Вопросы Claude** (AskUserQuestion): варианты ответа в челке.
-- **Быстрые ответы:** «Продолжай», «Запусти тесты» или своё сообщение. Работает для Terminal и iTerm2.
-- **Живучесть:** закрытые терминалы исчезают из списка, прерывание по Esc распознаётся по журналу, после перезапуска Peppap живые сессии восстанавливаются.
-- **Правый клик по сессии:** закрепить сверху, переименовать, скрыть до следующей активности.
-- **Экспорт отчёта за неделю** в Markdown (меню ✦), отклик трекпада, когда задача готова.
-- **Окно настроек** (меню ✦ → «Настройки…»).
+> The app interface is currently in Russian. Menu items are quoted below with English translations.
 
-## Установка
+## Features
 
-Скачайте `Peppap-<версия>.dmg` со страницы [Releases](../../releases) и перетащите Peppap в «Программы».
+- **Status in the notch.** While Claude works, a ✻ spinner turns next to the notch, a ring shows progress through Claude's plan, and a timer counts the current task.
+- **Answer permission requests from the notch:** Allow, Always allow, Deny, or hand the request back to the terminal. If the session's terminal is already in front, the request goes straight there. If you don't answer, it returns to the terminal after a configurable timeout.
+- **Change preview** (Edit / MultiEdit / Write) right in the permission card.
+- **Claude's questions** (AskUserQuestion) with answer options in the notch.
+- **Per-session details:** Claude's plan (`TodoWrite`, `TaskCreate`) with progress, context usage, running subagents, Claude's last reply, tokens and cost for the task and the session, changed files and lines.
+- **Exact subscription limits** (5-hour and weekly) and exact context usage, taken from the Claude Code status line. If you already had a status line, it keeps showing: Peppap only reads the data.
+- **Today tab:** daily totals, usage limits and a timeline of finished tasks.
+- **Week tab:** a 7-day chart by cost, time or number of tasks, plus a Markdown export of the weekly report.
+- **Quick replies:** "Continue", "Run the tests" or your own message. Works with Terminal and iTerm2.
+- **Jump to a session:** the right Terminal or iTerm2 tab (matched by tty), the project window in VS Code, Cursor, Windsurf or Zed, or just the terminal app.
+- **Hotkey** (⌃⌥C by default) opens the notch with keyboard control: ↑↓ select, ⏎ jump, Tab switch tabs, A/S/D/T answer a permission request, Esc close.
+- **Notifications:** sound, trackpad haptics and auto-expanding notch. Sound can be limited to long tasks. Peppap stays quiet during calls (microphone in use) and in full-screen apps.
+- **Resilience:** closed terminals disappear from the list, Esc interrupts are detected from the transcript, and live sessions are restored after Peppap restarts.
+- **Right-click a session** to pin it, rename it, or hide it until its next activity.
+- **Settings window** (✦ menu → «Настройки…», Settings).
 
-Приложение не нотаризовано Apple, поэтому при первом запуске macOS его заблокирует. Снимите карантин:
+## Installation
+
+Download `Peppap-<version>.dmg` from [Releases](../../releases) and drag Peppap to Applications.
+
+The app is not notarized by Apple, so macOS blocks it on first launch. Remove the quarantine flag:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/Peppap.app
 ```
 
-Или откройте «Системные настройки → Конфиденциальность и безопасность» и нажмите «Всё равно открыть».
+Or open System Settings → Privacy & Security and click "Open Anyway".
 
-Нужна macOS 14 или новее, Apple Silicon или Intel.
+Requires macOS 14 or later, Apple Silicon or Intel.
 
-## Сборка из исходников
+## Setup
+
+1. Hover over the notch and click **«Подключить»** (Connect), or use the ✦ menu in the menu bar.
+   Peppap adds its hooks and status line to `~/.claude/settings.json`. A backup is saved as `settings.json.peppap-backup`, and the scripts live in `~/.peppap/`.
+2. Restart running `claude` sessions if they don't pick up the change.
+
+The hook sends event JSON to `127.0.0.1:47821`. If Peppap isn't running, `curl` exits silently and Claude Code is unaffected.
+
+The ✦ menu also has: sound toggle, settings, weekly report export, demo, demo recording, and disconnecting the hooks (which restores your previous status line).
+
+## Building from source
 
 ```sh
-./build.sh                         # под текущий процессор
-ARCHS="arm64 x86_64" ./build.sh    # универсальная сборка, как в CI
-scripts/package.sh                 # dist/Peppap-<версия>.zip и .dmg
+./build.sh                         # for the current CPU
+ARCHS="arm64 x86_64" ./build.sh    # universal build, as in CI
+scripts/package.sh                 # dist/Peppap-<version>.zip and .dmg
 open build/Peppap.app
 ```
 
-Нужны только Command Line Tools (Xcode не обязателен).
+Only the Command Line Tools are needed (Xcode is optional).
 
-Демо для README записывает сам Peppap: меню ✦ → «Записать демо-ролик…». Нужно разрешение на запись экрана. Затем из записи собираются GIF и MP4:
+Run `scripts/setup-signing.sh` once. It creates a local signing certificate in a separate keychain, so macOS permissions (such as controlling the terminal) survive rebuilds.
+
+Peppap records its own README demo: ✦ menu → «Записать демо-ролик…» (Record demo video). This needs the Screen Recording permission. Then build the GIF and MP4 from the recording:
 
 ```sh
 swiftc scripts/make-demo-media.swift -o /tmp/make-demo-media
 /tmp/make-demo-media ~/Movies/Peppap/peppap-demo.mov docs 3 41 1840 10
 ```
 
-Один раз выполните `scripts/setup-signing.sh`. Скрипт создаст локальный сертификат в отдельной связке ключей, и разрешения macOS (управление терминалом) перестанут сбрасываться после каждой сборки.
+## Versioning and releases
 
-## Версии и релизы
-
-- Версия хранится в файле `VERSION` (SemVer). Номер сборки — число коммитов.
-- Изменения записываются в раздел `## [Unreleased]` файла `CHANGELOG.md`.
-- Выпуск версии:
+- The version lives in the `VERSION` file (SemVer). The build number is the commit count.
+- Changes go into the `## [Unreleased]` section of `CHANGELOG.md`.
+- To cut a release:
 
   ```sh
-  scripts/release.sh 0.4.0              # VERSION + CHANGELOG, коммит и тег v0.4.0
-  git push origin main --follow-tags    # GitHub Actions соберёт и опубликует релиз
+  scripts/release.sh 0.4.0              # updates VERSION + CHANGELOG, commits and tags v0.4.0
+  git push origin main --follow-tags    # GitHub Actions builds and publishes the release
   ```
 
-- **CI** (`.github/workflows/ci.yml`) собирает универсальную сборку на каждый push в `main` и на каждый PR, готовые `.zip` и `.dmg` лежат в артефактах сборки.
-- **Release** (`.github/workflows/release.yml`) запускается тегом `vX.Y.Z`. Он проверяет, что тег совпадает с `VERSION`, собирает приложение и публикует GitHub Release с `.dmg`, `.zip`, `SHA256SUMS.txt` и заметками из CHANGELOG.
+- **CI** (`.github/workflows/ci.yml`) builds a universal app on every push to `main` and every pull request; the `.zip` and `.dmg` are attached as build artifacts.
+- **Release** (`.github/workflows/release.yml`) runs on `vX.Y.Z` tags. It checks the tag matches `VERSION`, builds the app and publishes a GitHub Release with the `.dmg`, `.zip`, `SHA256SUMS.txt` and notes from the changelog.
 
-## Подключение
+## How it works
 
-1. Наведите курсор на челку и нажмите **«Подключить»** (или выберите пункт в меню ✦ в строке меню).
-   Peppap добавит hook в `~/.claude/settings.json`. Резервная копия сохраняется в `settings.json.peppap-backup`, а сам скрипт лежит в `~/.peppap/peppap-hook.sh`.
-2. Перезапустите открытые сессии `claude`.
-
-Hook отправляет JSON события на `127.0.0.1:47821`. Если Peppap не запущен, `curl` тихо завершается и не мешает работе Claude Code.
-
-В меню строки меню есть: звук, авто-раскрытие, автозапуск при входе, демо-режим и отключение hooks.
-
-## Устройство
-
-| Файл | Что делает |
+| File | Purpose |
 |---|---|
-| `HookInstaller.swift` | hook-скрипт и правка `settings.json` (обновляется автоматически при запуске) |
-| `EventServer.swift` | локальный HTTP-сервер для событий |
-| `SessionStore.swift` | состояние сессий и дневная статистика |
-| `UsageScanner.swift` | токены, стоимость, 5-часовые окна из jsonl-логов |
-| `NotchController.swift` | панель над челкой, наведение, авто-раскрытие |
-| `NotchView.swift` | интерфейс на SwiftUI |
-| `TerminalFocus.swift` | переход к терминалу или редактору |
-| `History.swift` | история задач (`~/Library/Application Support/Peppap/history.json`) |
-| `HotKey.swift` | глобальная горячая клавиша |
-| `Quiet.swift` | режим «не беспокоить»: созвон, полный экран |
-| `SettingsView.swift` | окно настроек |
-| `Prefs.swift` | настройки по умолчанию |
-| `ProcessWatcher.swift` | живые процессы `claude`, хвост журнала, восстановление |
-| `Diff.swift` | предпросмотр изменений, имена и закрепление сессий |
-| `Report.swift` | отчёт за неделю |
-| `scripts/make-icon.swift` | генерация иконки |
+| `HookInstaller.swift` | hook and status line scripts, `settings.json` changes (updated automatically on launch) |
+| `EventServer.swift` | local HTTP server for hook events and status line data |
+| `SessionStore.swift` | session state, permissions, daily stats |
+| `UsageScanner.swift` | tokens, cost and 5-hour windows from the jsonl transcripts |
+| `ProcessWatcher.swift` | running `claude` processes, transcript tail, session restore |
+| `NotchController.swift` | the notch panel, hover, auto-expand, keyboard |
+| `NotchView.swift` | SwiftUI interface |
+| `TerminalFocus.swift` | jumping to a terminal or editor, quick replies |
+| `Diff.swift` | change preview, session names and pinning |
+| `History.swift` | task history (`~/Library/Application Support/Peppap/history.json`) |
+| `Report.swift` | weekly report |
+| `DemoRecorder.swift` | demo recording for the README |
+| `HotKey.swift` | global hotkey |
+| `Quiet.swift` | do-not-disturb: calls, full screen |
+| `SettingsView.swift`, `Prefs.swift` | settings window and defaults |
+| `scripts/make-icon.swift` | app icon generator |
 
-## Лицензия
+## License
 
 [MIT](LICENSE) © 2026 Alexander Buzmakov

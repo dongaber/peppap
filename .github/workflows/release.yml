@@ -40,14 +40,14 @@ jobs:
 
           ---
 
-          **Установка:** скачайте `.dmg`, перетащите Peppap в «Программы».
-          Приложение не нотаризовано, поэтому при первом запуске выполните:
+          **Install:** download the `.dmg` and drag Peppap to Applications.
+          The app is not notarized, so on first launch run:
 
           ```sh
           xattr -dr com.apple.quarantine /Applications/Peppap.app
           ```
 
-          или откройте его через «Системные настройки → Конфиденциальность и безопасность → Всё равно открыть».
+          or open it via System Settings → Privacy & Security → Open Anyway.
           NOTES
           cat notes.md
 
