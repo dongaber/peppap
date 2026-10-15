@@ -62,3 +62,15 @@ jobs:
             --title "Peppap $VERSION" \
             --notes-file notes.md \
             --verify-tag
+
+      - name: Обновление Homebrew cask
+        run: |
+          SHA=$(shasum -a 256 "dist/Peppap-$VERSION.zip" | awk '{print $1}')
+          git fetch origin main
+          git checkout -B main origin/main
+          sed -i '' -E "s/^  version \".*\"/  version \"$VERSION\"/; s/^  sha256 \".*\"/  sha256 \"$SHA\"/" Casks/peppap.rb
+          if git diff --quiet; then echo "Cask уже актуален"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Update Homebrew cask to $VERSION"
+          git push origin main

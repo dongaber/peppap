@@ -34,9 +34,18 @@ Claude Code session status right in your MacBook notch.
 
 ## Installation
 
-Download `Peppap-<version>.dmg` from [Releases](../../releases) and drag Peppap to Applications.
+With [Homebrew](https://brew.sh):
 
-The app is not notarized by Apple, so macOS blocks it on first launch. Remove the quarantine flag:
+```sh
+brew tap dongaber/peppap https://github.com/dongaber/peppap
+brew install --cask peppap
+```
+
+Peppap updates itself after that (✦ menu → Update…), and `brew upgrade` works too.
+
+Or download `Peppap-<version>.dmg` from [Releases](../../releases) and drag Peppap to Applications.
+
+The app is not notarized by Apple, so macOS blocks a downloaded copy on first launch (Homebrew and in-app updates handle this for you). Remove the quarantine flag:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/Peppap.app
@@ -88,7 +97,7 @@ swiftc scripts/make-demo-media.swift -o /tmp/make-demo-media
   ```
 
 - **CI** (`.github/workflows/ci.yml`) builds a universal app on every push to `main` and every pull request; the `.zip` and `.dmg` are attached as build artifacts.
-- **Release** (`.github/workflows/release.yml`) runs on `vX.Y.Z` tags. It checks the tag matches `VERSION`, builds the app and publishes a GitHub Release with the `.dmg`, `.zip`, `SHA256SUMS.txt` and notes from the changelog.
+- **Release** (`.github/workflows/release.yml`) runs on `vX.Y.Z` tags. It checks the tag matches `VERSION`, runs the tests, builds the app, publishes a GitHub Release with the `.dmg`, `.zip`, `SHA256SUMS.txt` and notes from the changelog, then bumps `Casks/peppap.rb` on `main`.
 
 ## How it works
 

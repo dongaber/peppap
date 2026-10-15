@@ -47,3 +47,26 @@ jobs:
           name: Peppap-${{ github.sha }}
           path: dist/*
           retention-days: 14
+
+  cask:
+    name: Homebrew cask
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Tap из этого репозитория
+        run: brew tap dongaber/peppap "$GITHUB_WORKSPACE"
+
+      - name: Audit
+        run: brew audit --cask --online dongaber/peppap/peppap
+
+      - name: Установка и удаление
+        run: |
+          brew install --cask dongaber/peppap/peppap
+          test -d /Applications/Peppap.app
+          if xattr /Applications/Peppap.app | grep -q com.apple.quarantine; then
+            echo "::error::Карантин не снят"; exit 1
+          fi
+          brew uninstall --cask dongaber/peppap/peppap
