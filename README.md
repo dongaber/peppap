@@ -66,7 +66,7 @@ scripts/package.sh                 # dist/Peppap-<version>.zip and .dmg
 open build/Peppap.app
 ```
 
-Only the Command Line Tools are needed (Xcode is optional).
+Only the Command Line Tools are needed (Xcode is optional). Run the tests with `scripts/test.sh`.
 
 Run `scripts/setup-signing.sh` once. It creates a local signing certificate in a separate keychain, so macOS permissions (such as controlling the terminal) survive rebuilds.
 

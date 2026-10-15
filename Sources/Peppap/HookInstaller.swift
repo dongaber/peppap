@@ -9,7 +9,8 @@ enum HookInstaller {
     /// PermissionRequest ждёт ответа из челки — ему нужен долгий таймаут.
     private static let permissionTimeout = 600
 
-    static var home: URL { FileManager.default.homeDirectoryForCurrentUser }
+    /// Домашний каталог; тесты подменяют его временной папкой.
+    nonisolated(unsafe) static var home = FileManager.default.homeDirectoryForCurrentUser
     static var scriptURL: URL { home.appendingPathComponent(".peppap/peppap-hook.sh") }
     static var statusScriptURL: URL { home.appendingPathComponent(".peppap/peppap-status.sh") }
     /// Прежняя строка состояния пользователя: её команда (как скрипт) и исходные настройки.

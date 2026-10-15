@@ -410,6 +410,12 @@ final class SessionStore: ObservableObject {
         change(&sessions[i])
     }
 
+    /// Время последнего события сессии (для тестов).
+    func setUpdatedAt(_ id: String, _ date: Date) {
+        guard let i = sessions.firstIndex(where: { $0.id == id }) else { return }
+        sessions[i].updatedAt = date
+    }
+
     var debugDescription: String {
         var lines = sessions.map { s in
             "\(s.id.prefix(8)) \(s.project) phase=\(s.phase.label) tty=\(s.tty ?? "-") host=\(s.hostBundleID ?? "-")"

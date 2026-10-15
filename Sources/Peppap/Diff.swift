@@ -52,10 +52,10 @@ enum Diff {
         while i < a.count || j < b.count {
             if i < a.count, j < b.count, a[i] == b[j] {
                 out.append((.context, a[i])); i += 1; j += 1
-            } else if j < b.count, i == a.count || lcs[i][j + 1] >= lcs[i + 1][j] {
-                out.append((.add, b[j])); j += 1
+            } else if i < a.count, j == b.count || lcs[i + 1][j] >= lcs[i][j + 1] {
+                out.append((.remove, a[i])); i += 1 // сначала удалённые строки, затем добавленные
             } else {
-                out.append((.remove, a[i])); i += 1
+                out.append((.add, b[j])); j += 1
             }
         }
         // Длинные неизменённые участки сворачиваем, оставляя по строке контекста.

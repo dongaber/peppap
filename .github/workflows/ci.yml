@@ -25,6 +25,9 @@ jobs:
           swiftc --version
           xcrun --show-sdk-path
 
+      - name: Тесты
+        run: scripts/test.sh
+
       - name: Сборка (Apple Silicon + Intel)
         env:
           ARCHS: arm64 x86_64

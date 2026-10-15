@@ -5,6 +5,12 @@ and versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Test suite (`scripts/test.sh`) covering hook parsing, status line, diffs, usage, transcripts, session flows and settings install; runs in CI.
+
+### Fixed
+- Change preview now lists removed lines before added ones.
+
 ## [0.3.0] — 2026-10-15
 
 First public release.

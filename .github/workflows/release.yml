@@ -25,6 +25,9 @@ jobs:
           [ "$TAG" = "$FILE" ] || { echo "::error::Тег v$TAG не совпадает с VERSION ($FILE)"; exit 1; }
           echo "VERSION=$FILE" >> "$GITHUB_ENV"
 
+      - name: Тесты
+        run: scripts/test.sh
+
       - name: Сборка (Apple Silicon + Intel)
         env:
           ARCHS: arm64 x86_64
