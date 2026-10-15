@@ -46,10 +46,14 @@ struct NotchView: View {
     @ObservedObject var ui: NotchUIState
     let actions: NotchActions
 
+    /// Смена языка пересобирает интерфейс целиком.
+    @AppStorage(Prefs.Key.language) private var language = AppLanguage.system.rawValue
+
     private var ear: CGFloat { ui.isExpanded ? 12 : (store.hasActivity ? 6 : 0) }
 
     var body: some View {
         content
+            .id(language)
             .padding(.horizontal, ear)
             .background(NotchShape(top: ear, bottom: ui.isExpanded ? 22 : 10).fill(Color.black))
             .background(GeometryReader { g in
@@ -192,7 +196,7 @@ private struct ExpandedView: View {
             HooksBanner(action: actions.installHooks)
         }
         if store.visibleSessions.isEmpty {
-            Text("Нет активных сессий. Запустите `claude` в терминале.")
+            Text(L("No active sessions. Run `claude` in a terminal.", "Нет активных сессий. Запустите `claude` в терминале."))
                 .font(.system(size: 12))
                 .foregroundStyle(Ink.secondary)
                 .frame(maxWidth: .infinity, minHeight: 44)
@@ -217,14 +221,14 @@ private struct ExpandedView: View {
     private var summary: String {
         let working = store.visibleSessions.filter { $0.phase == .working }.count
         let total = store.visibleSessions.count
-        if total == 0 { return "нет сессий" }
-        return working > 0 ? "\(working) из \(total) в работе" : "сессий: \(total)"
+        if total == 0 { return L("no sessions", "нет сессий") }
+        return working > 0 ? L("\(working) of \(total) working", "\(working) из \(total) в работе") : L("sessions: \(total)", "сессий: \(total)")
     }
 
     private var hint: String {
-        let base = "↑↓ выбор · ⏎ перейти · Tab вкладки · Esc закрыть"
+        let base = L("↑↓ select · ⏎ open · Tab tabs · Esc close", "↑↓ выбор · ⏎ перейти · Tab вкладки · Esc закрыть")
         if let s = store.sessions.first(where: { $0.id == ui.selectedID }), let p = s.pending, p.questions.isEmpty {
-            return "A разрешить · S всегда · D отклонить · T в терминале · " + base
+            return L("A allow · S always · D deny · T terminal · ", "A разрешить · S всегда · D отклонить · T в терминале · ") + base
         }
         return base
     }
@@ -254,10 +258,10 @@ private struct HooksBanner: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "bolt.horizontal.circle.fill").foregroundStyle(Color.claude)
-            Text("Подключите hooks, чтобы Peppap видел сессии")
+            Text(L("Connect the hooks so Peppap can see your sessions", "Подключите hooks, чтобы Peppap видел сессии"))
                 .font(.system(size: 12)).foregroundStyle(Ink.primary.opacity(0.85))
             Spacer()
-            Button("Подключить", action: action)
+            Button(L("Connect", "Подключить"), action: action)
                 .buttonStyle(NotchButtonStyle(prominent: true))
                 .controlSize(.small)
         }
@@ -290,7 +294,7 @@ private struct SessionRow: View {
                             .lineLimit(1)
                         if session.subagents > 0 {
                             Chip(icon: "arrow.triangle.branch", text: "\(session.subagents)")
-                                .help("Запущено субагентов: \(session.subagents)")
+                                .help(L("Running subagents: ", "Запущено субагентов: ") + "\(session.subagents)")
                         }
                         if let fraction = session.contextFraction {
                             ContextChip(fraction: fraction, exact: session.status?.contextPercent != nil)
@@ -353,16 +357,16 @@ private struct SessionRow: View {
         .contentShape(Rectangle())
         .onHover { hover = $0 }
         .onTapGesture { actions.select(session) }
-        .help("Перейти к сессии · правый клик — ещё")
+        .help(L("Open the session · right-click for more", "Перейти к сессии · правый клик — ещё"))
         .contextMenu {
-            Button("Перейти к сессии") { actions.select(session) }
-            Button(session.isPinned ? "Открепить" : "Закрепить сверху") { store.togglePin(session.id) }
-            Button("Переименовать…") { actions.rename(session) }
+            Button(L("Open session", "Перейти к сессии")) { actions.select(session) }
+            Button(session.isPinned ? L("Unpin", "Открепить") : L("Pin to top", "Закрепить сверху")) { store.togglePin(session.id) }
+            Button(L("Rename…", "Переименовать…")) { actions.rename(session) }
             if SessionLabels.name(for: session.cwd) != nil {
-                Button("Вернуть имя папки") { store.rename(session.id, to: nil) }
+                Button(L("Use folder name", "Вернуть имя папки")) { store.rename(session.id, to: nil) }
             }
             Divider()
-            Button("Скрыть до следующей активности") { store.hide(session.id) }
+            Button(L("Hide until next activity", "Скрыть до следующей активности")) { store.hide(session.id) }
         }
     }
 }
@@ -379,7 +383,7 @@ private struct QuickReply: View {
                     .buttonStyle(NotchButtonStyle())
                     .controlSize(.small)
             }
-            TextField("Написать Claude…", text: $text)
+            TextField(L("Message Claude…", "Написать Claude…"), text: $text)
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
                 .onSubmit {
@@ -409,7 +413,7 @@ private struct QuestionCard: View {
                             Text(h.uppercased()).font(.system(size: 9, weight: .bold)).foregroundStyle(Ink.muted)
                         }
                         if q.multiSelect {
-                            Text("можно несколько").font(.system(size: 9)).foregroundStyle(Ink.muted)
+                            Text(L("pick any", "можно несколько")).font(.system(size: 9)).foregroundStyle(Ink.muted)
                         }
                     }
                     Text(q.question)
@@ -423,12 +427,12 @@ private struct QuestionCard: View {
             }
             HStack {
                 if let onSubmit {
-                    Button("Ответить") { onSubmit(answers) }
+                    Button(L("Answer", "Ответить")) { onSubmit(answers) }
                         .buttonStyle(NotchButtonStyle(prominent: true))
                         .disabled(!complete)
                 }
                 Spacer()
-                Button(onSubmit == nil ? "Ответить в терминале" : "В терминале", action: onTerminal)
+                Button(onSubmit == nil ? L("Answer in terminal", "Ответить в терминале") : L("In terminal", "В терминале"), action: onTerminal)
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundStyle(Ink.secondary)
@@ -542,7 +546,8 @@ private struct ContextChip: View {
         .padding(.horizontal, 5)
         .padding(.vertical, 1.5)
         .background(Capsule().fill(Color.white.opacity(0.08)))
-        .help(exact ? "Контекст заполнен на \(pct)%" : "Контекст заполнен примерно на \(pct)% (оценка по журналу)")
+        .help(exact ? L("Context \(pct)% full", "Контекст заполнен на \(pct)%")
+                    : L("Context about \(pct)% full (estimated from the transcript)", "Контекст заполнен примерно на \(pct)% (оценка по журналу)"))
     }
 }
 
@@ -562,12 +567,12 @@ private struct MetaLine: View {
     private var items: [String] {
         var out: [String] = []
         if let m = session.metrics {
-            if m.taskTokens > 0 { out.append("задача \(Fmt.tokens(m.taskTokens)) · \(Fmt.usd(m.taskCost))") }
-            if m.tokens > 0 { out.append("сессия \(Fmt.tokens(m.tokens)) · \(Fmt.usd(m.cost))") }
+            if m.taskTokens > 0 { out.append(L("task", "задача") + " \(Fmt.tokens(m.taskTokens)) · \(Fmt.usd(m.taskCost))") }
+            if m.tokens > 0 { out.append(L("session", "сессия") + " \(Fmt.tokens(m.tokens)) · \(Fmt.usd(m.cost))") }
         }
-        if !session.changedFiles.isEmpty { out.append("изменено \(Fmt.files(session.changedFiles.count))") }
+        if !session.changedFiles.isEmpty { out.append(L("changed ", "изменено ") + Fmt.files(session.changedFiles.count)) }
         if let st = session.status, let add = st.linesAdded, let del = st.linesRemoved, add + del > 0 {
-            out.append("+\(add) −\(del) строк")
+            out.append("+\(add) −\(del) " + Fmt.lines(add + del))
         }
         return out
     }
@@ -581,13 +586,13 @@ private struct PermissionCard: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "hand.raised.fill").foregroundStyle(.yellow).font(.system(size: 11))
-                Text("Claude хочет выполнить \(prompt.tool)")
+                Text(L("Claude wants to run ", "Claude хочет выполнить ") + prompt.tool)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Ink.primary)
                 Spacer()
                 TimelineView(.periodic(from: .now, by: 1)) { ctx in
                     let left = max(0, Prefs.permissionTimeout - ctx.date.timeIntervalSince(prompt.receivedAt))
-                    Text("в терминал через \(Fmt.duration(left))")
+                    Text(L("to terminal in ", "в терминал через ") + Fmt.duration(left))
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundStyle(Ink.muted)
                 }
@@ -617,16 +622,16 @@ private struct PermissionCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 7))
             }
             HStack(spacing: 8) {
-                Button("Разрешить") { answer(.allow) }
+                Button(L("Allow", "Разрешить")) { answer(.allow) }
                     .buttonStyle(NotchButtonStyle(prominent: true))
                 if prompt.suggestionsJSON != nil {
-                    Button("Разрешать всегда") { answer(.allowAlways) }
+                    Button(L("Always allow", "Разрешать всегда")) { answer(.allowAlways) }
                         .buttonStyle(NotchButtonStyle())
                 }
-                Button("Отклонить") { answer(.deny) }
+                Button(L("Deny", "Отклонить")) { answer(.deny) }
                     .buttonStyle(NotchButtonStyle())
                 Spacer()
-                Button("В терминале") { answer(.terminal) }
+                Button(L("In terminal", "В терминале")) { answer(.terminal) }
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundStyle(Ink.secondary)
@@ -695,7 +700,7 @@ private struct TodoStrip: View {
                 Text("\(done)/\(todos.count)")
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .foregroundStyle(Ink.primary.opacity(0.8))
-                Text(current.map { $0.active ?? $0.title } ?? (done == todos.count ? "План выполнен" : todos.first { !$0.isDone }?.title ?? ""))
+                Text(current.map { $0.active ?? $0.title } ?? (done == todos.count ? L("Plan complete", "План выполнен") : todos.first { !$0.isDone }?.title ?? ""))
                     .font(.system(size: 10))
                     .foregroundStyle(Ink.secondary)
                     .lineLimit(1)
@@ -719,7 +724,7 @@ private struct TimeLabel: View {
         if session.phase == .working || session.phase == .permission, let start = session.taskStart {
             return Fmt.duration(now.timeIntervalSince(start))
         }
-        if session.phase == .done, let d = session.lastDuration { return "за \(Fmt.duration(d))" }
+        if session.phase == .done, let d = session.lastDuration { return L("in ", "за ") + Fmt.duration(d) }
         return Fmt.ago(session.updatedAt)
     }
 }
@@ -735,7 +740,7 @@ private struct TodayTab: View {
             Rectangle().fill(Ink.line).frame(height: 1)
             let records = store.todayRecords
             if records.isEmpty {
-                Text("Сегодня задач ещё не было")
+                Text(L("No tasks yet today", "Сегодня задач ещё не было"))
                     .font(.system(size: 12)).foregroundStyle(Ink.secondary)
                     .frame(maxWidth: .infinity, minHeight: 40)
             } else {
@@ -784,14 +789,14 @@ private struct StatsFooter: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 0) {
-                Stat(title: "Задач сегодня", value: "\(today.tasks)")
-                Stat(title: "Время работы", value: Fmt.hours(today.seconds))
-                Stat(title: "Токены сегодня", value: usage.map { Fmt.tokens($0.todayTokens) } ?? "—")
-                Stat(title: "≈ по ценам API", value: usage.map { Fmt.usd($0.todayCost) } ?? "—")
+                Stat(title: L("Tasks today", "Задач сегодня"), value: "\(today.tasks)")
+                Stat(title: L("Working time", "Время работы"), value: Fmt.hours(today.seconds))
+                Stat(title: L("Tokens today", "Токены сегодня"), value: usage.map { Fmt.tokens($0.todayTokens) } ?? "—")
+                Stat(title: L("≈ at API prices", "≈ по ценам API"), value: usage.map { Fmt.usd($0.todayCost) } ?? "—")
             }
             if let l = limits, l.fiveHour != nil || l.sevenDay != nil {
-                if let f = l.fiveHour { LimitBar(title: "Лимит 5 ч", limit: f) }
-                if let w = l.sevenDay { LimitBar(title: "Лимит недели", limit: w) }
+                if let f = l.fiveHour { LimitBar(title: L("5-hour limit", "Лимит 5 ч"), limit: f) }
+                if let w = l.sevenDay { LimitBar(title: L("Weekly limit", "Лимит недели"), limit: w) }
             } else if let u = usage {
                 BlockBar(usage: u)
             }
@@ -816,12 +821,7 @@ private struct LimitBar: View {
     let title: String
     let limit: StatusInfo.Limit
 
-    private static let resetFormat: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ru_RU")
-        f.dateFormat = "EE HH:mm"
-        return f
-    }()
+    private static var resetFormat: DateFormatter { L10n.dateFormatter("EE HH:mm") }
 
     var body: some View {
         let fraction = min(1, max(0, limit.percent / 100))
@@ -831,7 +831,7 @@ private struct LimitBar: View {
                 Text("\(Int(limit.percent.rounded()))%").foregroundStyle(Ink.primary).fontWeight(.semibold)
                 Spacer()
                 if let r = limit.resetsAt {
-                    Text("сброс " + (Calendar.current.isDateInToday(r) ? "в \(Fmt.time(r))" : Self.resetFormat.string(from: r)))
+                    Text(L("resets ", "сброс ") + (Calendar.current.isDateInToday(r) ? L("at ", "в ") + Fmt.time(r) : Self.resetFormat.string(from: r)))
                         .foregroundStyle(Ink.muted)
                 }
             }
@@ -855,14 +855,14 @@ private struct BlockBar: View {
         TimelineView(.periodic(from: .now, by: 30)) { ctx in
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("Окно 5 ч (оценка)").foregroundStyle(Ink.secondary)
+                    Text(L("5-hour window (estimate)", "Окно 5 ч (оценка)")).foregroundStyle(Ink.secondary)
                     if let end = usage.blockEnd {
                         Text("\(Fmt.tokens(usage.blockTokens)) · \(Fmt.usd(usage.blockCost))").foregroundStyle(Ink.primary.opacity(0.85))
                         Spacer()
-                        Text("сброс через \(Fmt.hours(end.timeIntervalSince(ctx.date)))").foregroundStyle(Ink.muted)
+                        Text(L("resets in ", "сброс через ") + Fmt.hours(end.timeIntervalSince(ctx.date))).foregroundStyle(Ink.muted)
                     } else {
                         Spacer()
-                        Text("не начато").foregroundStyle(Ink.muted)
+                        Text(L("not started", "не начато")).foregroundStyle(Ink.muted)
                     }
                 }
                 .font(.system(size: 11))
@@ -887,8 +887,16 @@ private struct BlockBar: View {
 
 // MARK: - Неделя
 
-private enum WeekMetric: String, CaseIterable {
-    case time = "Время", tasks = "Задачи", cost = "≈ $"
+private enum WeekMetric: CaseIterable {
+    case time, tasks, cost
+
+    var title: String {
+        switch self {
+        case .time: return L("Time", "Время")
+        case .tasks: return L("Tasks", "Задачи")
+        case .cost: return "≈ $"
+        }
+    }
 }
 
 private struct WeekTab: View {
@@ -896,19 +904,8 @@ private struct WeekTab: View {
     @State private var metric: WeekMetric = .cost
     @State private var hovered: Date?
 
-    private static let weekday: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ru_RU")
-        f.dateFormat = "EE"
-        return f
-    }()
-
-    private static let fullDay: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ru_RU")
-        f.dateFormat = "EEEE, d MMMM"
-        return f
-    }()
+    private static var weekday: DateFormatter { L10n.dateFormatter("EE") }
+    private static var fullDay: DateFormatter { L10n.dateFormatter(L("EEEE, MMMM d", "EEEE, d MMMM")) }
 
     var body: some View {
         let days = store.week
@@ -919,7 +916,7 @@ private struct WeekTab: View {
                 Spacer()
                 HStack(spacing: 2) {
                     ForEach(WeekMetric.allCases, id: \.self) { m in
-                        TabButton(title: m.rawValue, selected: metric == m) { metric = m }
+                        TabButton(title: m.title, selected: metric == m) { metric = m }
                     }
                 }
             }
@@ -949,11 +946,12 @@ private struct WeekTab: View {
 
             Rectangle().fill(Ink.line).frame(height: 1)
             HStack(spacing: 0) {
-                Stat(title: "Задач за 7 дней", value: "\(days.reduce(0) { $0 + $1.tasks })")
-                Stat(title: "Время работы", value: Fmt.hours(days.reduce(0) { $0 + $1.seconds }))
-                Stat(title: "≈ по ценам API", value: Fmt.usd(days.reduce(0) { $0 + $1.cost }))
+                Stat(title: L("Tasks in 7 days", "Задач за 7 дней"), value: "\(days.reduce(0) { $0 + $1.tasks })")
+                Stat(title: L("Working time", "Время работы"), value: Fmt.hours(days.reduce(0) { $0 + $1.seconds }))
+                Stat(title: L("≈ at API prices", "≈ по ценам API"), value: Fmt.usd(days.reduce(0) { $0 + $1.cost }))
             }
-            Text("Задачи и время считаются с момента установки Peppap, стоимость — по журналам Claude Code.")
+            Text(L("Tasks and time are counted since Peppap was installed; cost comes from Claude Code transcripts.",
+                   "Задачи и время считаются с момента установки Peppap, стоимость — по журналам Claude Code."))
                 .font(.system(size: 10)).foregroundStyle(Ink.muted)
         }
     }
@@ -975,8 +973,8 @@ private struct WeekTab: View {
     }
 
     private func caption(_ days: [DaySummary]) -> String {
-        guard let day = hovered, let d = days.first(where: { $0.day == day }) else { return "Последние 7 дней" }
-        return "\(Self.fullDay.string(from: d.day)): \(d.tasks) задач · \(Fmt.hours(d.seconds)) · \(Fmt.usd(d.cost))"
+        guard let day = hovered, let d = days.first(where: { $0.day == day }) else { return L("Last 7 days", "Последние 7 дней") }
+        return "\(Self.fullDay.string(from: d.day)): \(Fmt.tasks(d.tasks)) · \(Fmt.hours(d.seconds)) · \(Fmt.usd(d.cost))"
     }
 }
 

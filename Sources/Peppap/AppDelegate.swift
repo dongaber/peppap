@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             try server.start()
             self.server = server
         } catch {
-            alert("Не удалось открыть порт \(EventServer.port)", error.localizedDescription)
+            alert(L("Couldn't open port ", "Не удалось открыть порт ") + "\(EventServer.port)", error.localizedDescription)
         }
 
         let hotKey = HotKey { [weak self] in
@@ -111,13 +111,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         notch.collapse()
         NSApp.activate()
         let a = NSAlert()
-        a.messageText = "Имя сессии"
+        a.messageText = L("Session name", "Имя сессии")
         a.informativeText = (s.cwd as NSString).abbreviatingWithTildeInPath
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
         field.stringValue = s.project
         a.accessoryView = field
-        a.addButton(withTitle: "Сохранить")
-        a.addButton(withTitle: "Отмена")
+        a.addButton(withTitle: L("Save", "Сохранить"))
+        a.addButton(withTitle: L("Cancel", "Отмена"))
         a.window.initialFirstResponder = field
         if a.runModal() == .alertFirstButtonReturn {
             store.rename(s.id, to: field.stringValue)
@@ -184,11 +184,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         do {
             try HookInstaller.install()
             store.hooksInstalled = true
-            alert("Hooks подключены",
-                  "Peppap прописан в ~/.claude/settings.json (резервная копия: settings.json.peppap-backup). "
-                  + "Уже открытые сессии Claude Code подхватят изменения после перезапуска.")
+            alert(L("Hooks connected", "Hooks подключены"),
+                  L("Peppap was added to ~/.claude/settings.json (backup: settings.json.peppap-backup). "
+                    + "Running Claude Code sessions pick up the change after a restart.",
+                    "Peppap прописан в ~/.claude/settings.json (резервная копия: settings.json.peppap-backup). "
+                    + "Уже открытые сессии Claude Code подхватят изменения после перезапуска."))
         } catch {
-            alert("Не удалось подключить hooks", error.localizedDescription)
+            alert(L("Couldn't connect the hooks", "Не удалось подключить hooks"), error.localizedDescription)
         }
     }
 
@@ -197,7 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             try HookInstaller.uninstall()
             store.hooksInstalled = false
         } catch {
-            alert("Не удалось удалить hooks", error.localizedDescription)
+            alert(L("Couldn't remove the hooks", "Не удалось удалить hooks"), error.localizedDescription)
         }
     }
 
@@ -216,25 +218,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         menu.addItem(withTitle: "Peppap \(version)", action: nil, keyEquivalent: "")
         let n = store.sessions.count
-        menu.addItem(withTitle: n == 0 ? "Нет активных сессий" : "Сессий Claude Code: \(n)", action: nil, keyEquivalent: "")
+        menu.addItem(withTitle: n == 0 ? L("No active sessions", "Нет активных сессий") : L("Claude Code sessions: ", "Сессий Claude Code: ") + "\(n)",
+                     action: nil, keyEquivalent: "")
         if Prefs.hotkey != .off {
-            add(menu, "Открыть челку (\(Prefs.hotkey.title))", #selector(menuOpenNotch))
+            add(menu, L("Open the notch", "Открыть челку") + " (\(Prefs.hotkey.title))", #selector(menuOpenNotch))
         }
         menu.addItem(.separator())
 
         let installed = HookInstaller.isInstalled
         store.hooksInstalled = installed
-        add(menu, installed ? "Отключить hooks Claude Code" : "Подключить hooks Claude Code",
+        add(menu, installed ? L("Disconnect Claude Code hooks", "Отключить hooks Claude Code") : L("Connect Claude Code hooks", "Подключить hooks Claude Code"),
             installed ? #selector(menuUninstallHooks) : #selector(menuInstallHooks))
-        add(menu, "Звук уведомлений", #selector(toggleSound), on: Prefs.sound)
-        add(menu, "Настройки…", #selector(openSettings), key: ",")
+        add(menu, L("Notification sound", "Звук уведомлений"), #selector(toggleSound), on: Prefs.sound)
+        add(menu, L("Settings…", "Настройки…"), #selector(openSettings), key: ",")
         menu.addItem(.separator())
-        add(menu, "Экспорт отчёта за неделю…", #selector(exportReport))
-        add(menu, "Показать демо", #selector(runDemo))
-        add(menu, "Записать демо-ролик…", #selector(recordDemo))
-        add(menu, "Обновить статистику", #selector(menuRefresh))
+        add(menu, L("Export weekly report…", "Экспорт отчёта за неделю…"), #selector(exportReport))
+        add(menu, L("Play demo", "Показать демо"), #selector(runDemo))
+        add(menu, L("Record demo video…", "Записать демо-ролик…"), #selector(recordDemo))
+        add(menu, L("Refresh stats", "Обновить статистику"), #selector(menuRefresh))
         menu.addItem(.separator())
-        add(menu, "Выйти", #selector(quit), key: "q")
+        add(menu, L("Quit", "Выйти"), #selector(quit), key: "q")
     }
 
     private func add(_ menu: NSMenu, _ title: String, _ action: Selector, on: Bool? = nil, key: String = "") {
@@ -263,8 +266,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func recordDemo() {
         if !CGPreflightScreenCaptureAccess() {
             CGRequestScreenCaptureAccess()
-            alert("Нужно разрешение на запись экрана",
-                  "Включите Peppap в «Системные настройки → Конфиденциальность и безопасность → Запись экрана», затем перезапустите Peppap.")
+            alert(L("Screen recording permission needed", "Нужно разрешение на запись экрана"),
+                  L("Enable Peppap in System Settings → Privacy & Security → Screen Recording, then restart Peppap.",
+                    "Включите Peppap в «Системные настройки → Конфиденциальность и безопасность → Запись экрана», затем перезапустите Peppap."))
             return
         }
         startDemo(record: true)
@@ -287,74 +291,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             try md.write(to: url, atomically: true, encoding: .utf8)
             NSWorkspace.shared.activateFileViewerSelecting([url])
         } catch {
-            alert("Не удалось сохранить отчёт", error.localizedDescription)
+            alert(L("Couldn't save the report", "Не удалось сохранить отчёт"), error.localizedDescription)
         }
     }
 
-    /// Проигрывает выдуманную сессию, чтобы посмотреть, как всё выглядит.
-    @objc private func runDemo() {
-        let id = "demo-\(UUID().uuidString.prefix(4))"
-        let cwd = NSHomeDirectory() + "/Projects/demo-app"
-        func ev(_ name: String, _ build: (inout HookEvent) -> Void = { _ in }) -> HookEvent {
-            var e = HookEvent(name: name, sessionID: id, cwd: cwd)
-            build(&e)
-            return e
-        }
-        let plan = ["Найти экран настроек", "Добавить переключатель темы", "Прогнать тесты"]
-        func todos(done: Int) -> [TodoItem] {
-            plan.enumerated().map { i, t in
-                TodoItem(id: "\(i)", title: t, active: t, status: i < done ? "completed" : i == done ? "in_progress" : "pending")
-            }
-        }
-        let steps: [(TimeInterval, HookEvent)] = [
-            (0, ev("UserPromptSubmit") { $0.prompt = "Добавь тёмную тему в настройки" }),
-            (1, ev("PreToolUse") { $0.activity = "Обновляет план"; $0.todos = todos(done: 0) }),
-            (2.5, ev("PreToolUse") { $0.activity = "Read SettingsView.swift" }),
-            (4, ev("SubagentStart")),
-            (4.5, ev("PreToolUse") { $0.activity = "Edit Theme.swift"; $0.todos = todos(done: 1) }),
-            (5, ev("PostToolUse") { $0.filePath = cwd + "/Theme.swift" }),
-            (6.5, ev("SubagentStop")),
-            (7, ev("PreToolUse") { $0.activity = "$ npm test"; $0.todos = todos(done: 2) }),
-            (7.5, ev("PermissionRequest") {
-                let input: [String: Any] = [
-                    "file_path": cwd + "/SettingsView.swift",
-                    "old_string": "Section(\"Вид\") {\n    Toggle(\"Крупный шрифт\", isOn: $largeFont)\n}",
-                    "new_string": "Section(\"Вид\") {\n    Toggle(\"Крупный шрифт\", isOn: $largeFont)\n    Toggle(\"Тёмная тема\", isOn: $darkMode)\n}",
-                ]
-                $0.toolName = "Edit"
-                $0.activity = "Edit SettingsView.swift"
-                $0.permissionDetail = "~/Projects/demo-app/SettingsView.swift"
-                $0.diff = Diff.preview(tool: "Edit", input: input)
-                $0.permissionID = "demo-permission-\(id)"
-            }),
-            (16, ev("PostToolUse") { $0.filePath = cwd + "/SettingsView.swift" }),
-            (17, ev("PermissionRequest") {
-                let input: [String: Any] = ["questions": [[
-                    "question": "Тёмную тему включать по системной настройке или отдельным переключателем?",
-                    "header": "Тема",
-                    "multiSelect": false,
-                    "options": [
-                        ["label": "Как в системе", "description": "Следовать настройке macOS"],
-                        ["label": "Переключатель", "description": "Пользователь выбирает сам"],
-                    ],
-                ]]]
-                $0.toolName = "AskUserQuestion"
-                $0.activity = "Задаёт вопрос"
-                $0.questions = HookEvent.questions(from: input)
-                $0.inputJSON = (try? JSONSerialization.data(withJSONObject: input)).flatMap { String(data: $0, encoding: .utf8) }
-                $0.permissionID = "demo-question-\(id)"
-            }),
-            (30, ev("PostToolUse") { $0.toolName = "AskUserQuestion" }),
-            (31, ev("PreToolUse") { $0.activity = "Обновляет план"; $0.todos = todos(done: 3) }),
-            (33, ev("Stop") { $0.lastAnswer = "Готово: добавил переключатель «Тёмная тема» в настройки, тема сохраняется между запусками. Тесты проходят (42 из 42)." }),
-            (75, ev("SessionEnd")),
-        ]
-        for (delay, event) in steps {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                MainActor.assumeIsolated { self?.store.handle(event) }
-            }
-        }
-    }
+    /// Проигрывает демо-сценарий без записи.
+    @objc private func runDemo() { startDemo(record: false) }
 
     private func alert(_ title: String, _ text: String) {
         NSApp.activate()

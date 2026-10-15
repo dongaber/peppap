@@ -96,8 +96,13 @@ final class DemoRecorder {
         let cal = Calendar.current
         let now = Date()
         let projects = ["demo-app", "api-server", "landing", "ios-client"]
-        let prompts = ["Добавь тёмную тему в настройки", "Почини падающий тест авторизации", "Обнови зависимости",
-                       "Сделай адаптивную шапку", "Добавь экспорт в CSV", "Разбери медленный запрос", "Напиши тесты для корзины"]
+        let prompts = [L("Add a dark theme to settings", "Добавь тёмную тему в настройки"),
+                       L("Fix the failing auth test", "Почини падающий тест авторизации"),
+                       L("Update dependencies", "Обнови зависимости"),
+                       L("Make the header responsive", "Сделай адаптивную шапку"),
+                       L("Add CSV export", "Добавь экспорт в CSV"),
+                       L("Investigate the slow query", "Разбери медленный запрос"),
+                       L("Write tests for the cart", "Напиши тесты для корзины")]
         let perDay = [6, 9, 4, 1, 7, 10, 5] // от 6 дней назад до сегодня
         let costs = [3.1, 5.6, 2.2, 0.4, 4.9, 6.3, 4.8]
         var records: [TaskRecord] = []
@@ -133,7 +138,8 @@ final class DemoRecorder {
             build(&e)
             return e
         }
-        let plan = ["Найти экран настроек", "Добавить тему в модель", "Переключатель в настройках", "Прогнать тесты"]
+        let plan = [L("Find the settings screen", "Найти экран настроек"), L("Add the theme to the model", "Добавить тему в модель"),
+                    L("Toggle in settings", "Переключатель в настройках"), L("Run the tests", "Прогнать тесты")]
         func todos(_ done: Int) -> [TodoItem] {
             plan.enumerated().map { i, t in
                 TodoItem(id: "\(i)", title: t, active: t + "…", status: i < done ? "completed" : i == done ? "in_progress" : "pending")
@@ -155,24 +161,27 @@ final class DemoRecorder {
         }
         let editInput: [String: Any] = [
             "file_path": cwdA + "/Sources/SettingsView.swift",
-            "old_string": "Section(\"Вид\") {\n    Toggle(\"Крупный шрифт\", isOn: $largeFont)\n}",
-            "new_string": "Section(\"Вид\") {\n    Toggle(\"Крупный шрифт\", isOn: $largeFont)\n    Toggle(\"Тёмная тема\", isOn: $darkMode)\n        .onChange(of: darkMode) { Theme.apply($0) }\n}",
+            "old_string": "Section(\"Appearance\") {\n    Toggle(\"Large text\", isOn: $largeText)\n}",
+            "new_string": "Section(\"Appearance\") {\n    Toggle(\"Large text\", isOn: $largeText)\n    Toggle(\"Dark theme\", isOn: $darkMode)\n        .onChange(of: darkMode) { Theme.apply($0) }\n}",
         ]
+        let questionText = L("The test fails because of an outdated snapshot. What should I do?",
+                             "Тест падает из-за устаревшего снапшота. Как поступить?")
+        let updateSnapshot = L("Update the snapshot", "Обновить снапшот")
         let question: [String: Any] = ["questions": [[
-            "question": "Тест падает из-за устаревшего снапшота. Как поступить?",
-            "header": "Тест",
+            "question": questionText,
+            "header": L("Test", "Тест"),
             "multiSelect": false,
             "options": [
-                ["label": "Обновить снапшот", "description": "Новый ответ API корректен"],
-                ["label": "Исправить код", "description": "Вернуть прежний формат ответа"],
+                ["label": updateSnapshot, "description": L("The new API response is correct", "Новый ответ API корректен")],
+                ["label": L("Fix the code", "Исправить код"), "description": L("Restore the previous response format", "Вернуть прежний формат ответа")],
             ],
         ]]]
 
         let steps: [(TimeInterval, () -> Void)] = [
-            (0.5, { self.store.handle(ev(a, "UserPromptSubmit") { $0.prompt = "Добавь тёмную тему в настройки" }) }),
-            (1.2, { self.store.handle(ev(a, "PreToolUse") { $0.activity = "Обновляет план"; $0.todos = todos(0) })
+            (0.5, { self.store.handle(ev(a, "UserPromptSubmit") { $0.prompt = L("Add a dark theme to settings", "Добавь тёмную тему в настройки") }) }),
+            (1.2, { self.store.handle(ev(a, "PreToolUse") { $0.activity = L("Updating the plan", "Обновляет план"); $0.todos = todos(0) })
                     status(a, ctx: 12, added: 0, removed: 0); metrics(a, task: 0.1, total: 1.4) }),
-            (2.2, { self.store.handle(ev(b, "UserPromptSubmit") { $0.prompt = "Почини падающий тест авторизации" })
+            (2.2, { self.store.handle(ev(b, "UserPromptSubmit") { $0.prompt = L("Fix the failing auth test", "Почини падающий тест авторизации") })
                     self.store.handle(ev(b, "PreToolUse") { $0.activity = "$ npm test -- auth" })
                     status(b, ctx: 31, added: 4, removed: 1); metrics(b, task: 0.2, total: 2.9) }),
             (3.6, { self.notch.show(tab: .sessions) }),
@@ -189,23 +198,24 @@ final class DemoRecorder {
                     }) }),
             (11.8, { self.store.answer(.allow, sessionID: a) }),
             (12.4, { self.store.handle(ev(a, "PostToolUse") { $0.filePath = cwdA + "/Sources/SettingsView.swift" })
-                     self.store.handle(ev(a, "PreToolUse") { $0.activity = "Обновляет план"; $0.todos = todos(2) })
+                     self.store.handle(ev(a, "PreToolUse") { $0.activity = L("Updating the plan", "Обновляет план"); $0.todos = todos(2) })
                      self.store.handle(ev(a, "SubagentStop")) }),
             (13.4, { self.store.handle(ev(b, "PermissionRequest") {
-                         $0.toolName = "AskUserQuestion"; $0.activity = "Задаёт вопрос"
+                         $0.toolName = "AskUserQuestion"; $0.activity = L("Asking a question", "Задаёт вопрос")
                          $0.questions = HookEvent.questions(from: question)
                          $0.inputJSON = (try? JSONSerialization.data(withJSONObject: question)).flatMap { String(data: $0, encoding: .utf8) }
                          $0.permissionID = "demo-question"
                      }) }),
-            (18.0, { self.store.answerQuestions(["Тест падает из-за устаревшего снапшота. Как поступить?": "Обновить снапшот"], sessionID: b)
+            (18.0, { self.store.answerQuestions([questionText: updateSnapshot], sessionID: b)
                      self.store.handle(ev(b, "PreToolUse") { $0.activity = "Edit auth.test.ts.snap" })
                      status(b, ctx: 36, added: 18, removed: 12) }),
             (19.5, { self.notch.collapse() }),
             (21.0, { self.store.handle(ev(a, "PreToolUse") { $0.activity = "$ swift test"; $0.todos = todos(3) })
                      status(a, ctx: 27, added: 61, removed: 9); metrics(a, task: 0.9, total: 2.2) }),
-            (24.0, { self.store.handle(ev(a, "PreToolUse") { $0.activity = "Обновляет план"; $0.todos = todos(4) })
+            (24.0, { self.store.handle(ev(a, "PreToolUse") { $0.activity = L("Updating the plan", "Обновляет план"); $0.todos = todos(4) })
                      self.store.handle(ev(a, "Stop") {
-                         $0.lastAnswer = "Готово: в настройках появился переключатель «Тёмная тема», выбор сохраняется между запусками. Все 42 теста проходят."
+                         $0.lastAnswer = L("Done: settings now have a “Dark theme” toggle, and the choice persists across launches. All 42 tests pass.",
+                                          "Готово: в настройках появился переключатель «Тёмная тема», выбор сохраняется между запусками. Все 42 теста проходят.")
                      })
                      metrics(a, task: 1.1, total: 2.4) }),
             (24.6, { self.notch.show(tab: .sessions) }),
@@ -213,7 +223,7 @@ final class DemoRecorder {
             (34.0, { self.notch.show(tab: .week) }),
             (38.5, { self.notch.show(tab: .sessions) }),
             (40.5, { self.notch.collapse() }),
-            (41.5, { self.store.handle(ev(b, "Stop") { $0.lastAnswer = "Снапшот обновлён, тесты авторизации проходят." }) }),
+            (41.5, { self.store.handle(ev(b, "Stop") { $0.lastAnswer = L("Snapshot updated, auth tests pass.", "Снапшот обновлён, тесты авторизации проходят.") }) }),
         ]
         for (t, step) in steps {
             DispatchQueue.main.asyncAfter(deadline: .now() + lead + t) { step() }
@@ -228,7 +238,7 @@ private struct DemoBackdrop: View {
 
     private static var clock: String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ru_RU")
+        f.locale = L10n.locale
         f.dateFormat = "EE HH:mm"
         return f.string(from: Date()).capitalized
     }
@@ -239,8 +249,8 @@ private struct DemoBackdrop: View {
                 Image(systemName: "apple.logo").font(.system(size: 13, weight: .semibold))
                 Text("Terminal").font(.system(size: 13, weight: .bold))
                 Text("Shell")
-                Text("Правка")
-                Text("Вид")
+                Text(L("Edit", "Правка"))
+                Text(L("View", "Вид"))
                 Spacer()
                 Image(systemName: "wifi")
                 Image(systemName: "battery.75percent")

@@ -23,61 +23,70 @@ struct SettingsView: View {
     @AppStorage(Prefs.Key.collapseDelay) private var collapseDelay = 0.3
     @AppStorage(Prefs.Key.hotkey) private var hotkey = HotKeyPreset.ctrlOptC.rawValue
     @AppStorage(Prefs.Key.haptics) private var haptics = true
-    @AppStorage(Prefs.Key.quickReplies) private var quickReplies = ""
+    @AppStorage(Prefs.Key.quickReplies) private var quickReplies = Prefs.defaultQuickReplies
+    @AppStorage(Prefs.Key.language) private var language = AppLanguage.system.rawValue
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
         Form {
-            Section("Уведомления") {
-                Toggle("Звук", isOn: $sound)
-                Picker("Задача готова", selection: $soundDone) { soundOptions }
+            Section {
+                Picker(L("Language", "Язык"), selection: $language) {
+                    ForEach(AppLanguage.allCases) { Text($0.title).tag($0.rawValue) }
+                }
+            }
+
+            Section(L("Notifications", "Уведомления")) {
+                Toggle(L("Sound", "Звук"), isOn: $sound)
+                Picker(L("Task done", "Задача готова"), selection: $soundDone) { soundOptions }
                     .disabled(!sound)
-                Picker("Нужно разрешение", selection: $soundPermission) { soundOptions }
+                Picker(L("Needs permission", "Нужно разрешение"), selection: $soundPermission) { soundOptions }
                     .disabled(!sound)
-                Picker("Звук о готовности, если задача длилась", selection: $soundMinSeconds) {
-                    Text("любое время").tag(0.0)
-                    Text("дольше 10 с").tag(10.0)
-                    Text("дольше 30 с").tag(30.0)
-                    Text("дольше 1 мин").tag(60.0)
-                    Text("дольше 2 мин").tag(120.0)
+                Picker(L("Play the done sound if the task took", "Звук о готовности, если задача длилась"), selection: $soundMinSeconds) {
+                    Text(L("any time", "любое время")).tag(0.0)
+                    Text(L("over 10 s", "дольше 10 с")).tag(10.0)
+                    Text(L("over 30 s", "дольше 30 с")).tag(30.0)
+                    Text(L("over 1 min", "дольше 1 мин")).tag(60.0)
+                    Text(L("over 2 min", "дольше 2 мин")).tag(120.0)
                 }
                 .disabled(!sound)
-                Toggle("Отклик трекпада, когда задача готова", isOn: $haptics)
-                Toggle("Раскрывать челку при событиях", isOn: $autoExpand)
-                LabeledContent("Показывать") {
+                Toggle(L("Trackpad haptics when a task is done", "Отклик трекпада, когда задача готова"), isOn: $haptics)
+                Toggle(L("Expand the notch on events", "Раскрывать челку при событиях"), isOn: $autoExpand)
+                LabeledContent(L("Show for", "Показывать")) {
                     HStack {
                         Slider(value: $peekSeconds, in: 2...10, step: 1)
-                        Text("\(Int(peekSeconds)) с").monospacedDigit().frame(width: 36, alignment: .trailing)
+                        Text("\(Int(peekSeconds)) " + L("s", "с")).monospacedDigit().frame(width: 36, alignment: .trailing)
                     }
                 }
                 .disabled(!autoExpand)
             }
 
             Section {
-                Toggle("Во время созвона (занят микрофон)", isOn: $quietInCalls)
-                Toggle("В полноэкранном режиме", isOn: $quietInFullscreen)
+                Toggle(L("During calls (microphone in use)", "Во время созвона (занят микрофон)"), isOn: $quietInCalls)
+                Toggle(L("In full-screen apps", "В полноэкранном режиме"), isOn: $quietInFullscreen)
             } header: {
-                Text("Не беспокоить")
+                Text(L("Do not disturb", "Не беспокоить"))
             } footer: {
-                Text("Без звука и без автоматического раскрытия. Статус в челке продолжает обновляться.")
+                Text(L("No sound and no auto-expanding. The notch status keeps updating.",
+                       "Без звука и без автоматического раскрытия. Статус в челке продолжает обновляться."))
                     .foregroundStyle(.secondary)
             }
 
             Section {
-                Toggle("Отвечать на запросы разрешений из челки", isOn: $permissionInNotch)
-                Toggle("Если терминал сессии активен — спрашивать там", isOn: $permissionDeferToFront)
+                Toggle(L("Answer permission requests in the notch", "Отвечать на запросы разрешений из челки"), isOn: $permissionInNotch)
+                Toggle(L("Ask in the terminal when it is in front", "Если терминал сессии активен — спрашивать там"), isOn: $permissionDeferToFront)
                     .disabled(!permissionInNotch)
-                Picker("Ждать ответа в челке", selection: $permissionTimeout) {
-                    Text("30 с").tag(30.0)
-                    Text("1 мин").tag(60.0)
-                    Text("2 мин").tag(120.0)
-                    Text("5 мин").tag(300.0)
+                Picker(L("Wait for an answer in the notch", "Ждать ответа в челке"), selection: $permissionTimeout) {
+                    Text(L("30 s", "30 с")).tag(30.0)
+                    Text(L("1 min", "1 мин")).tag(60.0)
+                    Text(L("2 min", "2 мин")).tag(120.0)
+                    Text(L("5 min", "5 мин")).tag(300.0)
                 }
                 .disabled(!permissionInNotch)
             } header: {
-                Text("Разрешения")
+                Text(L("Permissions", "Разрешения"))
             } footer: {
-                Text("Пока Peppap ждёт ответа, Claude Code не показывает запрос в терминале. Если не ответить, запрос вернётся в терминал.")
+                Text(L("While Peppap waits for your answer, Claude Code does not show the prompt in the terminal. If you don't answer, the request goes back to the terminal.",
+                       "Пока Peppap ждёт ответа, Claude Code не показывает запрос в терминале. Если не ответить, запрос вернётся в терминал."))
                     .foregroundStyle(.secondary)
             }
 
@@ -86,33 +95,34 @@ struct SettingsView: View {
                     .font(.system(size: 12))
                     .frame(height: 64)
             } header: {
-                Text("Быстрые ответы")
+                Text(L("Quick replies", "Быстрые ответы"))
             } footer: {
-                Text("По фразе на строку, в челке показываются первые три. Отправка работает для сессий в Terminal и iTerm2.")
+                Text(L("One phrase per line; the notch shows the first three. Sending works for sessions in Terminal and iTerm2.",
+                       "По фразе на строку, в челке показываются первые три. Отправка работает для сессий в Terminal и iTerm2."))
                     .foregroundStyle(.secondary)
             }
 
-            Section("Челка") {
-                Picker("Горячая клавиша", selection: $hotkey) {
+            Section(L("Notch", "Челка")) {
+                Picker(L("Hotkey", "Горячая клавиша"), selection: $hotkey) {
                     ForEach(HotKeyPreset.allCases) { Text($0.title).tag($0.rawValue) }
                 }
                 .onChange(of: hotkey) { _, value in onHotKeyChange(HotKeyPreset(rawValue: value) ?? .off) }
-                LabeledContent("Зона наведения") {
+                LabeledContent(L("Hover area", "Зона наведения")) {
                     HStack {
                         Slider(value: $hoverPadding, in: 0...30, step: 2)
                         Text("\(Int(hoverPadding)) pt").monospacedDigit().frame(width: 44, alignment: .trailing)
                     }
                 }
-                LabeledContent("Сворачивать через") {
+                LabeledContent(L("Collapse after", "Сворачивать через")) {
                     HStack {
                         Slider(value: $collapseDelay, in: 0.1...1.5, step: 0.1)
-                        Text(String(format: "%.1f с", collapseDelay)).monospacedDigit().frame(width: 44, alignment: .trailing)
+                        Text(String(format: "%.1f ", collapseDelay) + L("s", "с")).monospacedDigit().frame(width: 44, alignment: .trailing)
                     }
                 }
             }
 
-            Section("Система") {
-                Toggle("Запускать при входе в систему", isOn: $launchAtLogin)
+            Section(L("System", "Система")) {
+                Toggle(L("Launch at login", "Запускать при входе в систему"), isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, on in
                         do {
                             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
@@ -120,14 +130,14 @@ struct SettingsView: View {
                             launchAtLogin = SMAppService.mainApp.status == .enabled
                         }
                     }
-                LabeledContent("Hooks Claude Code") {
+                LabeledContent(L("Claude Code hooks", "Hooks Claude Code")) {
                     if store.hooksInstalled {
                         HStack {
-                            Label("подключены", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                            Button("Отключить", action: onUninstallHooks)
+                            Label(L("connected", "подключены"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                            Button(L("Disconnect", "Отключить"), action: onUninstallHooks)
                         }
                     } else {
-                        Button("Подключить", action: onInstallHooks)
+                        Button(L("Connect", "Подключить"), action: onInstallHooks)
                     }
                 }
             }
@@ -151,7 +161,7 @@ final class SettingsWindow {
             let host = NSHostingController(rootView: view)
             host.sizingOptions = [] // размер окна задаём сами, а не по высоте всего содержимого
             let w = NSWindow(contentViewController: host)
-            w.title = "Настройки Peppap"
+            w.title = L("Peppap Settings", "Настройки Peppap")
             w.styleMask = [.titled, .closable, .resizable]
             w.isReleasedWhenClosed = false
             w.contentMinSize = NSSize(width: 480, height: 320)

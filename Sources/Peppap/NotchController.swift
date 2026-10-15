@@ -6,9 +6,9 @@ enum NotchTab: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .sessions: return "Сессии"
-        case .today: return "Сегодня"
-        case .week: return "Неделя"
+        case .sessions: return L("Sessions", "Сессии")
+        case .today: return L("Today", "Сегодня")
+        case .week: return L("Week", "Неделя")
         }
     }
 }

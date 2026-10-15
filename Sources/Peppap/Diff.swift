@@ -29,7 +29,7 @@ enum Diff {
         if out.count > maxLines {
             let hidden = out.count - maxLines
             out = Array(out.prefix(maxLines))
-            out.append(DiffLine(id: out.count, kind: .gap, text: "… ещё \(hidden) строк"))
+            out.append(DiffLine(id: out.count, kind: .gap, text: L("… \(hidden) more ", "… ещё \(hidden) ") + Fmt.lines(hidden)))
         }
         return out
     }

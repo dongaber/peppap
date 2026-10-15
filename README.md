@@ -13,8 +13,6 @@ Claude Code session status right in your MacBook notch.
   </tr>
 </table>
 
-> The app interface is currently in Russian. Menu items are quoted below with English translations.
-
 ## Features
 
 - **Status in the notch.** While Claude works, a ✻ spinner turns next to the notch, a ring shows progress through Claude's plan, and a timer counts the current task.
@@ -31,7 +29,8 @@ Claude Code session status right in your MacBook notch.
 - **Notifications:** sound, trackpad haptics and auto-expanding notch. Sound can be limited to long tasks. Peppap stays quiet during calls (microphone in use) and in full-screen apps.
 - **Resilience:** closed terminals disappear from the list, Esc interrupts are detected from the transcript, and live sessions are restored after Peppap restarts.
 - **Right-click a session** to pin it, rename it, or hide it until its next activity.
-- **Settings window** (✦ menu → «Настройки…», Settings).
+- **English and Russian interface**, following the system language or switched in Settings without a restart.
+- **Settings window** (✦ menu → Settings…).
 
 ## Installation
 
@@ -49,7 +48,7 @@ Requires macOS 14 or later, Apple Silicon or Intel.
 
 ## Setup
 
-1. Hover over the notch and click **«Подключить»** (Connect), or use the ✦ menu in the menu bar.
+1. Hover over the notch and click **Connect**, or use the ✦ menu in the menu bar.
    Peppap adds its hooks and status line to `~/.claude/settings.json`. A backup is saved as `settings.json.peppap-backup`, and the scripts live in `~/.peppap/`.
 2. Restart running `claude` sessions if they don't pick up the change.
 
@@ -70,7 +69,7 @@ Only the Command Line Tools are needed (Xcode is optional). Run the tests with `
 
 Run `scripts/setup-signing.sh` once. It creates a local signing certificate in a separate keychain, so macOS permissions (such as controlling the terminal) survive rebuilds.
 
-Peppap records its own README demo: ✦ menu → «Записать демо-ролик…» (Record demo video). This needs the Screen Recording permission. Then build the GIF and MP4 from the recording:
+Peppap records its own README demo: ✦ menu → Record demo video…. This needs the Screen Recording permission. Then build the GIF and MP4 from the recording:
 
 ```sh
 swiftc scripts/make-demo-media.swift -o /tmp/make-demo-media
@@ -108,6 +107,7 @@ swiftc scripts/make-demo-media.swift -o /tmp/make-demo-media
 | `Report.swift` | weekly report |
 | `DemoRecorder.swift` | demo recording for the README |
 | `HotKey.swift` | global hotkey |
+| `L10n.swift` | English and Russian strings, language switch |
 | `Quiet.swift` | do-not-disturb: calls, full screen |
 | `SettingsView.swift`, `Prefs.swift` | settings window and defaults |
 | `scripts/make-icon.swift` | app icon generator |

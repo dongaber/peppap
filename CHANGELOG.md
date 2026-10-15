@@ -6,7 +6,11 @@ and versions follow [SemVer](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- English interface alongside Russian, with a language switch in Settings (System / English / Русский) that applies instantly.
 - Test suite (`scripts/test.sh`) covering hook parsing, status line, diffs, usage, transcripts, session flows and settings install; runs in CI.
+
+### Changed
+- “Play demo” now runs the same scenario as the demo recording.
 
 ### Fixed
 - Change preview now lists removed lines before added ones.

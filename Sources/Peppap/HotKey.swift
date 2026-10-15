@@ -8,10 +8,10 @@ enum HotKeyPreset: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .off: return "Выключена"
+        case .off: return L("Off", "Выключена")
         case .ctrlOptC: return "⌃⌥C"
-        case .ctrlOptSpace: return "⌃⌥Пробел"
-        case .optSpace: return "⌥Пробел"
+        case .ctrlOptSpace: return "⌃⌥" + L("Space", "Пробел")
+        case .optSpace: return "⌥" + L("Space", "Пробел")
         case .cmdShiftC: return "⌘⇧C"
         }
     }

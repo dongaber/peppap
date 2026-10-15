@@ -141,7 +141,7 @@ enum HookInstaller {
         guard FileManager.default.fileExists(atPath: settingsURL.path) else { return [:] }
         let data = try Data(contentsOf: settingsURL)
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw NSError(domain: "Peppap", code: 1, userInfo: [NSLocalizedDescriptionKey: "~/.claude/settings.json не является JSON-объектом"])
+            throw NSError(domain: "Peppap", code: 1, userInfo: [NSLocalizedDescriptionKey: L("~/.claude/settings.json is not a JSON object", "~/.claude/settings.json не является JSON-объектом")])
         }
         return root
     }

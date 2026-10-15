@@ -19,6 +19,7 @@ enum Prefs {
         static let hotkey = "hotkey"
         static let haptics = "haptics"
         static let quickReplies = "quickReplies"
+        static let language = L10n.key
     }
 
     static let soundNames = ["Glass", "Hero", "Ping", "Pop", "Purr", "Submarine", "Tink", "Funk", "Blow", "Bottle", "Frog", "Morse", "Sosumi", "Basso"]
@@ -40,7 +41,6 @@ enum Prefs {
             Key.collapseDelay: 0.3,
             Key.hotkey: HotKeyPreset.ctrlOptC.rawValue,
             Key.haptics: true,
-            Key.quickReplies: "Продолжай\nЗапусти тесты\nСделай коммит",
         ])
     }
 
@@ -59,8 +59,13 @@ enum Prefs {
     static var hoverPadding: Double { d.double(forKey: Key.hoverPadding) }
     static var collapseDelay: Double { d.double(forKey: Key.collapseDelay) }
     static var haptics: Bool { d.bool(forKey: Key.haptics) }
+    /// Готовые фразы по умолчанию — на текущем языке, пока пользователь не задал свои.
+    static var defaultQuickReplies: String {
+        L("Continue\nRun the tests\nCommit the changes", "Продолжай\nЗапусти тесты\nСделай коммит")
+    }
+
     static var quickReplies: [String] {
-        (d.string(forKey: Key.quickReplies) ?? "").split(separator: "\n")
+        (d.string(forKey: Key.quickReplies) ?? defaultQuickReplies).split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
     static var hotkey: HotKeyPreset { HotKeyPreset(rawValue: d.string(forKey: Key.hotkey) ?? "") ?? .ctrlOptC }

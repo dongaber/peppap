@@ -169,7 +169,7 @@ final class SessionStore: ObservableObject {
         case "SubagentStop":
             s.subagents = max(0, s.subagents - 1)
         case "PreCompact":
-            s.activity = "Сжимает контекст…"
+            s.activity = L("Compacting context…", "Сжимает контекст…")
         case "Notification":
             let msg = (e.message ?? "").lowercased()
             if e.notificationType == "permission_prompt" || msg.contains("permission") {
@@ -233,7 +233,7 @@ final class SessionStore: ObservableObject {
                 decision["updatedPermissions"] = suggestions
             }
         case .deny:
-            decision = ["behavior": "deny", "message": "Пользователь отклонил запрос в Peppap."]
+            decision = ["behavior": "deny", "message": "The user denied this request in Peppap."]
         case .terminal:
             onPermissionReply?(p.id, nil)
             sessions[i].pending = nil
@@ -339,7 +339,7 @@ final class SessionStore: ObservableObject {
         let start = sessions[i].taskStart ?? .distantPast
         if let t = snap.interruptedAt, t >= start.addingTimeInterval(-1) {
             sessions[i].phase = .waiting
-            sessions[i].activity = "Прервано"
+            sessions[i].activity = L("Interrupted", "Прервано")
             sessions[i].taskStart = nil
             sessions[i].subagents = 0
         } else if let t = snap.turnEndedAt, t >= start {
@@ -424,7 +424,7 @@ final class SessionStore: ObservableObject {
             + " todos=\(s.todos.count) pending=\(s.pending?.tool ?? "-") q=\(s.question != nil) prompt=\(s.prompt?.prefix(40) ?? "-")"
         }
         if let l = limits {
-            lines.append("limits 5h=\(l.fiveHour.map { "\($0.percent)% до \($0.resetsAt.map(Fmt.time) ?? "?")" } ?? "-") 7d=\(l.sevenDay.map { "\($0.percent)%" } ?? "-")")
+            lines.append("limits 5h=\(l.fiveHour.map { "\($0.percent)% @ \($0.resetsAt.map(Fmt.time) ?? "?")" } ?? "-") 7d=\(l.sevenDay.map { "\($0.percent)%" } ?? "-")")
         }
         return lines.joined(separator: "\n") + "\n"
     }

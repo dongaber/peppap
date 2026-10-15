@@ -11,11 +11,11 @@ enum Phase: Int, Comparable {
 
     var label: String {
         switch self {
-        case .idle: return "Ожидание"
-        case .waiting: return "Ждёт ответа"
-        case .done: return "Готово"
-        case .working: return "Работает"
-        case .permission: return "Нужно разрешение"
+        case .idle: return L("Idle", "Ожидание")
+        case .waiting: return L("Waiting for you", "Ждёт ответа")
+        case .done: return L("Done", "Готово")
+        case .working: return L("Working", "Работает")
+        case .permission: return L("Needs permission", "Нужно разрешение")
         }
     }
 
@@ -122,13 +122,13 @@ struct StatusInfo: Sendable {
     var line: String {
         var parts: [String] = []
         if let m = model { parts.append("✻ \(m)") }
-        if let c = contextPercent { parts.append("контекст \(Int(c.rounded()))%") }
+        if let c = contextPercent { parts.append(L("context", "контекст") + " \(Int(c.rounded()))%") }
         if let f = fiveHour {
-            var s = "5 ч \(Int(f.percent.rounded()))%"
-            if let r = f.resetsAt { s += " до \(Fmt.time(r))" }
+            var s = L("5h", "5 ч") + " \(Int(f.percent.rounded()))%"
+            if let r = f.resetsAt { s += " " + L("until", "до") + " \(Fmt.time(r))" }
             parts.append(s)
         }
-        if let w = sevenDay { parts.append("неделя \(Int(w.percent.rounded()))%") }
+        if let w = sevenDay { parts.append(L("week", "неделя") + " \(Int(w.percent.rounded()))%") }
         return parts.joined(separator: " · ")
     }
 }
@@ -193,10 +193,10 @@ struct ClaudeSession: Identifiable {
 
     var subtitle: String {
         switch phase {
-        case .working: return activity ?? currentTodo.map { $0.active ?? $0.title } ?? "Думает…"
+        case .working: return activity ?? currentTodo.map { $0.active ?? $0.title } ?? L("Thinking…", "Думает…")
         case .permission:
-            if let q = pending?.questions.first ?? question { return "Вопрос: \(q.question)" }
-            return pending.map { "\($0.tool): \($0.detail)" } ?? activity.map { "Разрешить? \($0)" } ?? "Ждёт вашего решения"
+            if let q = pending?.questions.first ?? question { return L("Question: ", "Вопрос: ") + q.question }
+            return pending.map { "\($0.tool): \($0.detail)" } ?? activity.map { L("Allow? ", "Разрешить? ") + $0 } ?? L("Waiting for your decision", "Ждёт вашего решения")
         default: return prompt ?? (cwd as NSString).abbreviatingWithTildeInPath
         }
     }
@@ -324,9 +324,9 @@ struct HookEvent: Sendable {
         case "Grep", "Glob": return "\(tool) \(str("pattern") ?? "")"
         case "WebFetch": return "WebFetch \(str("url").flatMap { URL(string: $0)?.host } ?? "")"
         case "WebSearch": return "WebSearch \(str("query") ?? "")"
-        case "Task", "Agent": return "Агент: \(str("description") ?? "")"
-        case "TodoWrite", "TaskCreate", "TaskUpdate": return "Обновляет план"
-        case "AskUserQuestion": return "Задаёт вопрос"
+        case "Task", "Agent": return L("Agent: ", "Агент: ") + (str("description") ?? "")
+        case "TodoWrite", "TaskCreate", "TaskUpdate": return L("Updating the plan", "Обновляет план")
+        case "AskUserQuestion": return L("Asking a question", "Задаёт вопрос")
         default:
             if tool.hasPrefix("mcp__") { return "MCP " + (tool.split(separator: "_").last.map(String.init) ?? tool) }
             return tool
@@ -370,7 +370,7 @@ enum Fmt {
 
     static func hours(_ t: TimeInterval) -> String {
         let m = Int(t) / 60
-        return m >= 60 ? "\(m / 60)ч \(m % 60)м" : "\(m)м"
+        return m >= 60 ? "\(m / 60)" + L("h ", "ч ") + "\(m % 60)" + L("m", "м") : "\(m)" + L("m", "м")
     }
 
     static func tokens(_ n: Int) -> String {
@@ -385,9 +385,9 @@ enum Fmt {
 
     static func ago(_ d: Date) -> String {
         let s = Int(-d.timeIntervalSinceNow)
-        if s < 60 { return "только что" }
-        if s < 3600 { return "\(s / 60) мин назад" }
-        return "\(s / 3600) ч назад"
+        if s < 60 { return L("just now", "только что") }
+        if s < 3600 { return "\(s / 60) " + L("min ago", "мин назад") }
+        return "\(s / 3600) " + L("h ago", "ч назад")
     }
 
     static func time(_ d: Date) -> String {
@@ -397,8 +397,23 @@ enum Fmt {
     }
 
     static func files(_ n: Int) -> String {
+        "\(n) " + plural(n, en: ("file", "files"), ru: ("файл", "файла", "файлов"))
+    }
+
+    static func tasks(_ n: Int) -> String {
+        "\(n) " + plural(n, en: ("task", "tasks"), ru: ("задача", "задачи", "задач"))
+    }
+
+    static func lines(_ n: Int) -> String {
+        plural(n, en: ("line", "lines"), ru: ("строка", "строки", "строк"))
+    }
+
+    /// Форма слова для числа: английская (1 / много) или русская (1 / 2–4 / 5+).
+    static func plural(_ n: Int, en: (String, String), ru: (String, String, String)) -> String {
+        guard L10n.current == .ru else { return n == 1 ? en.0 : en.1 }
         let m10 = n % 10, m100 = n % 100
-        let word = m10 == 1 && m100 != 11 ? "файл" : (2...4).contains(m10) && !(12...14).contains(m100) ? "файла" : "файлов"
-        return "\(n) \(word)"
+        if m10 == 1 && m100 != 11 { return ru.0 }
+        if (2...4).contains(m10) && !(12...14).contains(m100) { return ru.1 }
+        return ru.2
     }
 }
