@@ -5,6 +5,8 @@ and versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-10-15
+
 ### Added
 - English interface alongside Russian, with a language switch in Settings (System / English / Русский) that applies instantly.
 - Welcome window on first launch: language, one-click hook setup, permissions and tips (✦ menu → Welcome…).
@@ -46,5 +48,6 @@ First public release.
 - Settings window, launch at login.
 - Demo video recording for the README (made-up data, neutral background).
 
-[Unreleased]: https://github.com/dongaber/peppap/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/dongaber/peppap/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/dongaber/peppap/releases/tag/v0.4.0
 [0.3.0]: https://github.com/dongaber/peppap/releases/tag/v0.3.0
