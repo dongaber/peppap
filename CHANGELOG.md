@@ -32,5 +32,5 @@ First public release.
 - Settings window, launch at login.
 - Demo video recording for the README (made-up data, neutral background).
 
-[Unreleased]: https://github.com/OWNER/peppap/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/OWNER/peppap/releases/tag/v0.3.0
+[Unreleased]: https://github.com/dongaber/peppap/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/dongaber/peppap/releases/tag/v0.3.0
