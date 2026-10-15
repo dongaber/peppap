@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var watching = false
     private var lastDiscovery = Date.distantPast
     private var triedPIDs = Set<Int32>()
+    private var demo: DemoRecorder!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Prefs.register()
@@ -37,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             rename: { [weak self] s in self?.rename(s) },
             send: { [weak self] s, text in self?.send(text, to: s) }
         ))
+        demo = DemoRecorder(store: store, notch: notch)
         HookInstaller.updateIfNeeded()
         store.hooksInstalled = HookInstaller.isInstalled
         store.onAttention = { [weak self] s in self?.attention(s) }
@@ -48,6 +50,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
         store.onPermissionReply = { [weak server] id, body in server?.reply(id, json: body) }
         server.debugState = { [weak self] in self?.store.debugDescription ?? "" }
+        server.debugCommand = { [weak self] path in
+            guard let self else { return "" }
+            if self.demo.isRunning { return "already running\n" }
+            if path.hasPrefix("/demo-record") && !CGPreflightScreenCaptureAccess() {
+                CGRequestScreenCaptureAccess()
+                return "no screen recording permission\n"
+            }
+            self.startDemo(record: path.hasPrefix("/demo-record"))
+            return "started\n"
+        }
         do {
             try server.start()
             self.server = server
@@ -78,6 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - События
 
     private func attention(_ s: ClaudeSession) {
+        if store.demoActive { return } // сценарий демо сам управляет челкой и не шумит
         let quiet = Quiet.isQuiet
         if Prefs.sound && !quiet {
             if s.phase == .permission {
@@ -125,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Раз в 5 секунд: закрытые терминалы, прерванные задачи; раз в 30 секунд — поиск незнакомых сессий.
     private func watchProcesses() {
-        guard !watching else { return }
+        guard !watching, !store.demoActive else { return }
         watching = true
         let known = store.knownTTYs
         let stale = store.staleWorking
@@ -230,6 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         add(menu, "Экспорт отчёта за неделю…", #selector(exportReport))
         add(menu, "Показать демо", #selector(runDemo))
+        add(menu, "Записать демо-ролик…", #selector(recordDemo))
         add(menu, "Обновить статистику", #selector(menuRefresh))
         menu.addItem(.separator())
         add(menu, "Выйти", #selector(quit), key: "q")
@@ -256,6 +270,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             onUninstallHooks: { [weak self] in self?.uninstallHooks() },
             onHotKeyChange: { [weak self] preset in self?.hotKey?.set(preset) }
         ))
+    }
+
+    @objc private func recordDemo() {
+        if !CGPreflightScreenCaptureAccess() {
+            CGRequestScreenCaptureAccess()
+            alert("Нужно разрешение на запись экрана",
+                  "Включите Peppap в «Системные настройки → Конфиденциальность и безопасность → Запись экрана», затем перезапустите Peppap.")
+            return
+        }
+        startDemo(record: true)
+    }
+
+    private func startDemo(record: Bool) {
+        demo.start(record: record) { url in
+            if let url { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+        }
     }
 
     @objc private func exportReport() {

@@ -14,6 +14,8 @@ final class EventServer: @unchecked Sendable {
     private let onStatus: @MainActor (StatusInfo) -> Void
     /// Состояние для отладки: GET /debug (только localhost).
     var debugState: (@MainActor () -> String)?
+    /// Отладочные команды: GET /demo-record, /demo-play (только localhost).
+    var debugCommand: (@MainActor (String) -> String)?
 
     init(onEvent: @escaping @MainActor (HookEvent) -> Void, onAbandoned: @escaping @MainActor (String) -> Void,
          onStatus: @escaping @MainActor (StatusInfo) -> Void) {
@@ -55,6 +57,11 @@ final class EventServer: @unchecked Sendable {
             if let (path, headers, body) = Self.parse(buffer) {
                 if path.hasPrefix("/debug"), let debugState = self.debugState {
                     let text = DispatchQueue.main.sync { MainActor.assumeIsolated { debugState() } }
+                    Self.send(conn, body: Data(text.utf8), contentType: "text/plain; charset=utf-8")
+                    return
+                }
+                if path.hasPrefix("/demo"), let debugCommand = self.debugCommand {
+                    let text = DispatchQueue.main.sync { MainActor.assumeIsolated { debugCommand(path) } }
                     Self.send(conn, body: Data(text.utf8), contentType: "text/plain; charset=utf-8")
                     return
                 }

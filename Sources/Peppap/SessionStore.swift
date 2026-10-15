@@ -76,6 +76,8 @@ final class SessionStore: ObservableObject {
     // MARK: - События
 
     func handle(_ e: HookEvent) {
+        // Во время записи демо в челке только выдуманные сессии.
+        if demoActive && !e.sessionID.hasPrefix("demo-") { return }
         if e.name == "SessionEnd" {
             if var s = sessions.first(where: { $0.id == e.sessionID }) { releasePermission(&s) }
             sessions.removeAll { $0.id == e.sessionID }
@@ -273,6 +275,7 @@ final class SessionStore: ObservableObject {
     // MARK: - Строка состояния
 
     func applyStatus(_ info: StatusInfo) {
+        if demoActive { return }
         if info.fiveHour != nil || info.sevenDay != nil {
             limits = (info.fiveHour, info.sevenDay, Date())
         }
@@ -369,6 +372,42 @@ final class SessionStore: ObservableObject {
     func hide(_ id: String) {
         guard let i = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[i].hidden = true
+    }
+
+    // MARK: - Демо для записи
+
+    private var saved: (sessions: [ClaudeSession], history: [TaskRecord], today: DayStats, usage: UsageSummary?,
+                        limits: (fiveHour: StatusInfo.Limit?, sevenDay: StatusInfo.Limit?, at: Date)?)?
+    var demoActive: Bool { saved != nil }
+
+    /// Подменяет всё состояние выдуманным (без сохранения на диск); `endDemo` возвращает настоящее.
+    func beginDemo(history fake: [TaskRecord], usage fakeUsage: UsageSummary,
+                   fiveHour: StatusInfo.Limit, sevenDay: StatusInfo.Limit) {
+        guard saved == nil else { return }
+        saved = (sessions, history, today, usage, limits)
+        sessions = []
+        history = fake
+        let todays = fake.filter { Calendar.current.isDateInToday($0.start) }
+        today = DayStats(day: DayStats.key(), tasks: todays.count, seconds: todays.reduce(0) { $0 + $1.duration })
+        usage = fakeUsage
+        limits = (fiveHour, sevenDay, Date())
+    }
+
+    func endDemo() {
+        guard let s = saved else { return }
+        for var session in sessions { releasePermission(&session) }
+        sessions = s.sessions
+        history = s.history
+        today = s.today
+        usage = s.usage
+        limits = s.limits
+        saved = nil
+    }
+
+    /// Прямое изменение демо-сессии (метрики, статус), которых нет в событиях hooks.
+    func demoUpdate(_ id: String, _ change: (inout ClaudeSession) -> Void) {
+        guard demoActive, let i = sessions.firstIndex(where: { $0.id == id }) else { return }
+        change(&sessions[i])
     }
 
     var debugDescription: String {

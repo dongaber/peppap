@@ -258,8 +258,7 @@ private struct HooksBanner: View {
                 .font(.system(size: 12)).foregroundStyle(Ink.primary.opacity(0.85))
             Spacer()
             Button("Подключить", action: action)
-                .buttonStyle(.borderedProminent)
-                .tint(.claude)
+                .buttonStyle(NotchButtonStyle(prominent: true))
                 .controlSize(.small)
         }
         .padding(10)
@@ -377,7 +376,7 @@ private struct QuickReply: View {
         HStack(spacing: 6) {
             ForEach(Prefs.quickReplies.prefix(3), id: \.self) { phrase in
                 Button(phrase) { send(phrase) }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(NotchButtonStyle())
                     .controlSize(.small)
             }
             TextField("Написать Claude…", text: $text)
@@ -425,7 +424,7 @@ private struct QuestionCard: View {
             HStack {
                 if let onSubmit {
                     Button("Ответить") { onSubmit(answers) }
-                        .buttonStyle(.borderedProminent).tint(.claude)
+                        .buttonStyle(NotchButtonStyle(prominent: true))
                         .disabled(!complete)
                 }
                 Spacer()
@@ -480,6 +479,32 @@ private struct QuestionCard: View {
         Dictionary(uniqueKeysWithValues: questions.map { q in
             (q.question, q.options.map(\.label).filter { picked[q.question]?.contains($0) == true }.joined(separator: ", "))
         })
+    }
+}
+
+/// Кнопки челки. Системные стили в неактивной панели становятся серыми — рисуем сами.
+private struct NotchButtonStyle: ButtonStyle {
+    var prominent = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        StyledLabel(configuration: configuration, prominent: prominent)
+    }
+
+    private struct StyledLabel: View {
+        let configuration: Configuration
+        let prominent: Bool
+        @Environment(\.isEnabled) private var isEnabled
+
+        var body: some View {
+            configuration.label
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(prominent ? Color.white : Ink.primary.opacity(0.9))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(RoundedRectangle(cornerRadius: 6).fill(prominent ? Color.claude : Color.white.opacity(0.12)))
+                .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.35)
+                .contentShape(RoundedRectangle(cornerRadius: 6))
+        }
     }
 }
 
@@ -593,13 +618,13 @@ private struct PermissionCard: View {
             }
             HStack(spacing: 8) {
                 Button("Разрешить") { answer(.allow) }
-                    .buttonStyle(.borderedProminent).tint(.claude)
+                    .buttonStyle(NotchButtonStyle(prominent: true))
                 if prompt.suggestionsJSON != nil {
                     Button("Разрешать всегда") { answer(.allowAlways) }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(NotchButtonStyle())
                 }
                 Button("Отклонить") { answer(.deny) }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(NotchButtonStyle())
                 Spacer()
                 Button("В терминале") { answer(.terminal) }
                     .buttonStyle(.plain)

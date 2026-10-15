@@ -51,6 +51,8 @@ final class NotchController {
     private var wasInside = false
     private var collapseWork: DispatchWorkItem?
     private var peeking = false
+    /// Сценарий демо управляет челкой сам — наведение мыши игнорируется.
+    var scripted = false
 
     init(store: SessionStore, actions: NotchActions) {
         self.store = store
@@ -142,6 +144,7 @@ final class NotchController {
     }
 
     private func trackMouse() {
+        if scripted { return }
         let inside = hitRect.contains(NSEvent.mouseLocation)
         guard inside != wasInside else { return }
         wasInside = inside
@@ -195,6 +198,13 @@ final class NotchController {
         }
         collapseWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    /// Раскрыть на нужной вкладке (для сценария демо).
+    func show(tab: NotchTab) {
+        collapseWork?.cancel()
+        ui.tab = tab
+        ui.isExpanded = true
     }
 
     func collapse() {
