@@ -5,6 +5,8 @@ and versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-10-16
+
 ### Added
 - GitLab merge requests tab: your open MRs and review requests with pipeline status, approvals, comments and merge blockers. Host, token (kept in the Keychain) and refresh interval are set in Settings → GitLab.
 
@@ -51,6 +53,7 @@ First public release.
 - Settings window, launch at login.
 - Demo video recording for the README (made-up data, neutral background).
 
-[Unreleased]: https://github.com/dongaber/peppap/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/dongaber/peppap/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/dongaber/peppap/releases/tag/v0.4.1
 [0.4.0]: https://github.com/dongaber/peppap/releases/tag/v0.4.0
 [0.3.0]: https://github.com/dongaber/peppap/releases/tag/v0.3.0
