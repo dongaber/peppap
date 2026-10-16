@@ -3,6 +3,12 @@
 All notable changes to Peppap. Versions follow [SemVer](https://semver.org/); entries are generated from
 [Conventional Commits](https://www.conventionalcommits.org) by `bun run release`.
 
+## [0.5.1-beta.0](https://github.com/dongaber/peppap/compare/v0.5.0...v0.5.1-beta.0) (2026-10-16)
+
+### Fixed
+
+* **updater:** order pre-release versions per SemVer ([#3](https://github.com/dongaber/peppap/issues/3)) ([d5d3485](https://github.com/dongaber/peppap/commit/d5d348569077e9dd3438a866ccb4badd9e656011)), references [#1](https://github.com/dongaber/peppap/issues/1)
+
 ## [0.5.0] — 2026-10-16
 
 ### Added
