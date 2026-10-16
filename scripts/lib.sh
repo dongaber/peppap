@@ -1,4 +1,9 @@
-# Общие функции для build.sh и scripts/test.sh (подключается через «.»).
+# Общие функции для build.sh и scripts/*.sh (подключается через «.»).
+
+# Версия приложения — поле version в package.json (его поднимает `bun run release`).
+app_version() {
+  plutil -extract version raw -o - package.json
+}
 
 # Command Line Tools иногда содержат SDK новее компилятора — берём первый совместимый.
 pick_sdk() {

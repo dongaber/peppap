@@ -4,11 +4,12 @@
 #   ./build.sh                       — сборка под текущий процессор
 #   ARCHS="arm64 x86_64" ./build.sh  — универсальная сборка (так собирает CI)
 #
-# Версия берётся из файла VERSION, номер сборки — из числа коммитов (или BUILD_NUMBER).
+# Версия берётся из package.json, номер сборки — из числа коммитов (или BUILD_NUMBER).
 set -eu
 cd "$(dirname "$0")"
 
-VERSION=$(tr -d ' \n' < VERSION)
+. scripts/lib.sh
+VERSION=$(app_version)
 BUILD_NUMBER=${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}
 ARCHS=${ARCHS:-$(uname -m)}
 APP=build/Peppap.app
@@ -16,7 +17,6 @@ APP=build/Peppap.app
 rm -rf "$APP" build/obj
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" build/obj
 
-. scripts/lib.sh
 SDK=${SDK:-$(pick_sdk)}
 echo "Peppap $VERSION ($BUILD_NUMBER), архитектуры: $ARCHS"
 echo "SDK: $SDK"

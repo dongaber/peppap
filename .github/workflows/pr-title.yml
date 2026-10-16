@@ -1,0 +1,35 @@
+name: PR title
+
+# PR вливаются squash-merge: заголовок становится коммитом в main, а по нему release-it
+# собирает CHANGELOG и выбирает уровень версии. Поэтому заголовок — в формате Conventional Commits.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  conventional:
+    name: Conventional Commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            revert
+            docs
+            style
+            test
+            build
+            ci
+            chore
+          requireScope: false
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: 'Start the subject with a lowercase letter, e.g. "feat: add GitLab notifications".'
