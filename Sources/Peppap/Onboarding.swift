@@ -43,9 +43,9 @@ struct OnboardingView: View {
 
             Step(number: 2, title: L("Connect GitLab (optional)", "Подключите GitLab (по желанию)"),
                  text: L("See your open merge requests and review requests, with pipeline status and what blocks the merge. "
-                         + "You need the host of your GitLab and a token with the read_api scope.",
+                         + "You need the host of your GitLab and a token with the api scope (read_api if you only want to look).",
                          "Ваши открытые merge requests и запросы на ревью, со статусом пайплайна и тем, что мешает влить. "
-                         + "Понадобятся адрес вашего GitLab и токен со scope read_api.")) {
+                         + "Понадобятся адрес вашего GitLab и токен со scope api (read_api, если только смотреть).")) {
                 Button(L("Set Up in Settings…", "Настроить…"), action: onOpenSettings)
             }
 

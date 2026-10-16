@@ -293,7 +293,13 @@ private struct ExpandedView: View {
     private var hint: String {
         let base = L("↑↓ select · ⏎ open · Tab tabs · Esc close", "↑↓ выбор · ⏎ перейти · Tab вкладки · Esc закрыть")
         let sources = gitlab.isConfigured ? L(" · ←→ source", " · ←→ источник") : ""
-        if tab.source == .gitlab { return L("R refresh · ", "R обновить · ") + base + sources }
+        if tab.source == .gitlab {
+            let list = (tab == .review ? gitlab.snapshot?.review : gitlab.snapshot?.authored) ?? []
+            let keys = list.first { $0.id == ui.selectedMR }.map { mr in
+                gitlab.actions(for: mr).map { $0.keys[0].uppercased() + " " + $0.shortTitle.lowercased() + " · " }.joined()
+            } ?? ""
+            return keys + L("R refresh · ", "R обновить · ") + base + sources
+        }
         if let s = store.sessions.first(where: { $0.id == ui.selectedID }), let p = s.pending, p.questions.isEmpty {
             return L("A allow · S always · D deny · T terminal · ", "A разрешить · S всегда · D отклонить · T в терминале · ") + base
         }
@@ -1180,7 +1186,7 @@ private struct MergeRequestsTab: View {
         VStack(spacing: 6) {
             ForEach(list) { mr in
                 MergeRequestRow(mr: mr, event: gitlab.attention[mr.id], approvedByMe: mr.approvedBy.contains(me),
-                                selected: ui.selectedMR == mr.id) { actions.openMergeRequest(mr) }
+                                selected: ui.selectedMR == mr.id, gitlab: gitlab, ui: ui) { actions.openMergeRequest(mr) }
             }
         }
     }
@@ -1224,10 +1230,84 @@ private struct MergeRequestRow: View {
     let event: GitLab.Event.Kind?
     let approvedByMe: Bool
     let selected: Bool
+    @ObservedObject var gitlab: GitLabStore
+    @ObservedObject var ui: NotchUIState
     let open: () -> Void
     @State private var hover = false
 
+    private var available: [MergeRequestAction] { gitlab.actions(for: mr) }
+    private var running: MergeRequestAction? { gitlab.running[mr.id] }
+
     var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            summary
+            // Кнопки — при наведении или выборе с клавиатуры, пока идёт действие и пока видна его ошибка.
+            let buttons = available.filter(\.isPrimary)
+            let error = gitlab.actionErrors[mr.id]
+            if (hover || selected || running != nil) && !buttons.isEmpty || error != nil {
+                actionBar(buttons, error: error)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white.opacity(hover || selected ? 0.11 : 0.05))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(selected ? Color.claude.opacity(0.6) : .clear, lineWidth: 1))
+        )
+        .contentShape(Rectangle())
+        .onHover { hover = $0 }
+        .onTapGesture(perform: open)
+        .help(mr.project + "!" + mr.iid)
+        .contextMenu {
+            Button(L("Open in browser", "Открыть в браузере"), action: open)
+            Button(L("Copy link", "Скопировать ссылку")) {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(mr.url.absoluteString, forType: .string)
+            }
+            if !available.isEmpty {
+                Divider()
+                // В меню нажатие и есть подтверждение: оно открывается и выбирается осознанно.
+                ForEach(available, id: \.self) { a in
+                    Button(a.title + (a.needsConfirmation ? "…" : "")) { gitlab.perform(a, on: mr) }
+                        .disabled(running != nil)
+                }
+            }
+        }
+    }
+
+    private func actionBar(_ buttons: [MergeRequestAction], error: String?) -> some View {
+        HStack(spacing: 6) {
+            ForEach(buttons, id: \.self) { a in
+                let armed = ui.isArmed(a, on: mr.id)
+                Button {
+                    if ui.confirm(a, on: mr.id) { gitlab.perform(a, on: mr) }
+                } label: {
+                    HStack(spacing: 4) {
+                        if running == a {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            Image(systemName: a.symbol).font(.system(size: 9, weight: .bold))
+                        }
+                        Text(armed ? a.shortTitle + "?" : a.shortTitle)
+                    }
+                }
+                .buttonStyle(NotchButtonStyle(prominent: armed || a == .merge))
+                .disabled(running != nil)
+                .help(armed ? L("Click again to confirm", "Нажмите ещё раз, чтобы подтвердить") : a.title)
+            }
+            if let error {
+                Text(error)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, 28) // под заголовком, правее иконки пайплайна
+    }
+
+    private var summary: some View {
         HStack(spacing: 10) {
             PipelineIcon(pipeline: mr.pipeline).frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
@@ -1256,29 +1336,15 @@ private struct MergeRequestRow: View {
                         Chip(icon: approvedByMe ? "checkmark" : "hand.thumbsup", text: "\(mr.approvedBy.count)")
                             .help(L("Approved by: ", "Одобрили: ") + mr.approvedBy.map { "@" + $0 }.joined(separator: ", "))
                     }
+                    if mr.autoMerge {
+                        Chip(icon: "clock.arrow.circlepath", text: L("auto", "авто"))
+                            .help(L("Merges when the pipeline succeeds", "Вольётся, когда пройдёт пайплайн"))
+                    }
                     if mr.notes > 0 {
                         Chip(icon: "bubble.left", text: "\(mr.notes)")
                             .help(mr.discussionsResolved ? L("Comments", "Комментарии") : L("Comments · open threads", "Комментарии · есть нерешённые треды"))
                     }
                 }
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(hover || selected ? 0.11 : 0.05))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(selected ? Color.claude.opacity(0.6) : .clear, lineWidth: 1))
-        )
-        .contentShape(Rectangle())
-        .onHover { hover = $0 }
-        .onTapGesture(perform: open)
-        .help(mr.project + "!" + mr.iid)
-        .contextMenu {
-            Button(L("Open in browser", "Открыть в браузере"), action: open)
-            Button(L("Copy link", "Скопировать ссылку")) {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(mr.url.absoluteString, forType: .string)
             }
         }
     }

@@ -193,8 +193,8 @@ struct SettingsView: View {
                             .onSubmit { gitlab.refresh() }
                         if let url = GitLab.normalizedHost(gitlabHost).map(tokenPageURL) {
                             Button(L("Create…", "Создать…")) { NSWorkspace.shared.open(url) }
-                                .help(L("Open the GitLab page for a new token with the read_api scope",
-                                        "Открыть в GitLab страницу нового токена со scope read_api"))
+                                .help(L("Open the GitLab page for a new token with the api scope",
+                                        "Открыть в GitLab страницу нового токена со scope api"))
                         }
                     }
                 }
@@ -226,9 +226,9 @@ struct SettingsView: View {
         } header: {
             Text("GitLab")
         } footer: {
-            Text(L("A personal access token with the read_api scope; it is stored in the Keychain. "
+            Text(L("A personal access token: read_api is enough to see merge requests, api also lets you act on them. It is stored in the Keychain. "
                    + "Notifications follow the Notifications and Do not disturb settings.",
-                   "Personal access token со scope read_api, хранится в связке ключей. "
+                   "Personal access token: для просмотра хватает read_api, со scope api можно ещё и действовать. Хранится в связке ключей. "
                    + "Уведомления подчиняются разделам «Уведомления» и «Не беспокоить»."))
                 .foregroundStyle(.secondary)
         }
@@ -241,7 +241,14 @@ struct SettingsView: View {
         } else if let error = gitlab.error {
             Text(error).foregroundStyle(.red).lineLimit(2)
         } else if let s = gitlab.snapshot {
-            Label("@\(s.username)", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            VStack(alignment: .leading, spacing: 2) {
+                Label("@\(s.username)", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                if gitlab.canAct == false {
+                    Text(L("Read-only token: merge, approve and other actions need the api scope.",
+                           "Токен только для чтения: для merge, approve и других действий нужен scope api."))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
         } else {
             Text(gitlab.isConfigured ? L("not checked yet", "ещё не проверено") : L("enter the host and token", "укажите хост и токен"))
                 .foregroundStyle(.secondary)
@@ -251,7 +258,7 @@ struct SettingsView: View {
     /// Страница создания токена с заполненными именем и scope.
     private func tokenPageURL(_ host: URL) -> URL {
         var c = URLComponents(url: host.appendingPathComponent("-/user_settings/personal_access_tokens"), resolvingAgainstBaseURL: false)!
-        c.queryItems = [URLQueryItem(name: "name", value: "Peppap"), URLQueryItem(name: "scopes", value: "read_api")]
+        c.queryItems = [URLQueryItem(name: "name", value: "Peppap"), URLQueryItem(name: "scopes", value: "api")]
         return c.url!
     }
 

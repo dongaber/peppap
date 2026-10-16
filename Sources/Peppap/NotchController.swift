@@ -64,10 +64,37 @@ final class NotchUIState: ObservableObject {
     @Published var selectedID: String?
     /// Выбранный с клавиатуры merge request.
     @Published var selectedMR: String?
+    /// Действие, ждущее второго нажатия (merge): кнопка и клавиша показывают «Влить?».
+    @Published private(set) var armed: (mr: String, action: MergeRequestAction)?
+    private var disarmWork: DispatchWorkItem?
     /// Открыто горячей клавишей: не сворачивается при уходе курсора, принимает клавиатуру.
     @Published var pinned = false
     /// Фактический размер чёрной фигуры — по нему проверяем, находится ли курсор над раскрытой челкой.
     var shapeSize: CGSize = .zero
+
+    /// Первое нажатие опасного действия только «взводит» его на 3 секунды; true — можно выполнять.
+    func confirm(_ action: MergeRequestAction, on mr: String) -> Bool {
+        guard action.needsConfirmation else { return true }
+        if isArmed(action, on: mr) {
+            disarm()
+            return true
+        }
+        armed = (mr, action)
+        disarmWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.disarm() } }
+        disarmWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
+        return false
+    }
+
+    func isArmed(_ action: MergeRequestAction, on mr: String) -> Bool {
+        armed?.mr == mr && armed?.action == action
+    }
+
+    func disarm() {
+        disarmWork?.cancel()
+        if armed != nil { armed = nil }
+    }
 
     func select(_ source: NotchSource) {
         guard source != tab.source else { return }
@@ -233,7 +260,7 @@ final class NotchController {
     }
 
     private func selectAttentionMR() {
-        let list = (ui.tab == .review ? gitlab.snapshot?.review : gitlab.snapshot?.authored) ?? []
+        let list = gitlab.snapshot?.all ?? []
         ui.selectedMR = list.first { gitlab.attention[$0.id] == gitlab.attentionKind }?.id
     }
 
@@ -296,6 +323,7 @@ final class NotchController {
         ui.pinned = false
         ui.selectedID = nil
         ui.selectedMR = nil
+        ui.disarm()
         panel.ignoresMouseEvents = true
         wasInside = false
         // Клавиатуру возвращаем приложению, с которым работали, — но после анимации,
@@ -359,8 +387,9 @@ final class NotchController {
     }
 
     private func handleMergeRequestKey(keyCode: UInt16, chars: String?) -> Bool {
-        let list = gitlab.snapshot?.all ?? []
+        let list = (ui.tab == .review ? gitlab.snapshot?.review : gitlab.snapshot?.authored) ?? []
         let index = list.firstIndex { $0.id == ui.selectedMR }
+        if keyCode == 125 || keyCode == 126 { ui.disarm() }
         switch keyCode {
         case 125: // ↓
             guard !list.isEmpty else { return true }
@@ -371,8 +400,13 @@ final class NotchController {
         case 36, 76: // Return
             if let i = index { actions.openMergeRequest(list[i]) }
         default:
-            guard chars == "r" || chars == "к" else { return false }
-            gitlab.refresh()
+            if chars == "r" || chars == "к" {
+                gitlab.refresh()
+                return true
+            }
+            guard let i = index, let chars,
+                  let action = gitlab.actions(for: list[i]).first(where: { $0.keys.contains(chars) }) else { return false }
+            if ui.confirm(action, on: list[i].id) { gitlab.perform(action, on: list[i]) }
         }
         return true
     }
