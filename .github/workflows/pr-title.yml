@@ -32,4 +32,4 @@ jobs:
             chore
           requireScope: false
           subjectPattern: ^(?![A-Z]).+$
-          subjectPatternError: Start the subject with a lowercase letter, e.g. "feat: add GitLab notifications".
+          subjectPatternError: 'Start the subject with a lowercase letter, e.g. "feat: add GitLab notifications".'
