@@ -1,6 +1,7 @@
 # Сборка
 build/
 dist/
+node_modules/
 .build/
 .swiftpm/
 *.o

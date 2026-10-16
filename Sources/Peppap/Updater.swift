@@ -68,15 +68,30 @@ final class Updater: ObservableObject {
         available = nil
     }
 
-    /// Сравнение версий вида 1.2.3.
+    /// Сравнение версий по SemVer: 1.2.3 > 1.2.3-beta.2 > 1.2.3-beta.1 > 1.2.2. Сборочные метаданные (+…) не учитываются.
     static func isNewer(_ a: String, than b: String) -> Bool {
-        let pa = a.split(separator: ".").map { Int($0) ?? 0 }
-        let pb = b.split(separator: ".").map { Int($0) ?? 0 }
-        for i in 0..<max(pa.count, pb.count) {
-            let x = i < pa.count ? pa[i] : 0, y = i < pb.count ? pb[i] : 0
+        func split(_ v: String) -> (core: [Int], pre: [Substring]) {
+            let main = v.split(separator: "+", maxSplits: 1).first ?? ""
+            let parts = main.split(separator: "-", maxSplits: 1)
+            let core = (parts.first ?? "").split(separator: ".").map { Int($0) ?? 0 }
+            return (core, parts.count > 1 ? parts[1].split(separator: ".") : [])
+        }
+        let (ca, pa) = split(a), (cb, pb) = split(b)
+        for i in 0..<max(ca.count, cb.count) {
+            let x = i < ca.count ? ca[i] : 0, y = i < cb.count ? cb[i] : 0
             if x != y { return x > y }
         }
-        return false
+        // Ядро одинаковое: релиз новее любого своего пререлиза.
+        if pa.isEmpty || pb.isEmpty { return pa.isEmpty && !pb.isEmpty }
+        for i in 0..<min(pa.count, pb.count) where pa[i] != pb[i] {
+            switch (Int(pa[i]), Int(pb[i])) {
+            case let (x?, y?): return x > y
+            case (nil, nil): return pa[i] > pb[i]
+            case (nil, _): return true // буквенный идентификатор старше числового
+            case (_, nil): return false
+            }
+        }
+        return pa.count > pb.count
     }
 
     // MARK: - Установка
