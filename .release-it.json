@@ -1,0 +1,53 @@
+{
+  "$schema": "https://unpkg.com/release-it@21/schema/release-it.json",
+  "git": {
+    "requireBranch": [
+      "main",
+      "release/*"
+    ],
+    "requireCleanWorkingDir": true,
+    "commitMessage": "chore(release): v${version}",
+    "tagName": "v${version}",
+    "tagAnnotation": "Peppap ${version}"
+  },
+  "npm": false,
+  "github": {
+    "release": false
+  },
+  "hooks": {
+    "before:init": "scripts/test.sh",
+    "after:release": "echo 'Pushed v${version}: the Release workflow builds and publishes it.'"
+  },
+  "plugins": {
+    "@release-it/bumper": {
+      "in": "package.json",
+      "out": "package.json"
+    },
+    "@release-it/conventional-changelog": {
+      "infile": "CHANGELOG.md",
+      "header": "# Changelog\n\nAll notable changes to Peppap. Versions follow [SemVer](https://semver.org/); entries are generated from\n[Conventional Commits](https://www.conventionalcommits.org) by `bun run release`.",
+      "context": {
+        "host": "https://github.com",
+        "owner": "dongaber",
+        "repository": "peppap",
+        "repoUrl": "https://github.com/dongaber/peppap"
+      },
+      "preset": {
+        "name": "conventionalcommits",
+        "types": [
+          { "type": "feat", "section": "Added" },
+          { "type": "fix", "section": "Fixed" },
+          { "type": "perf", "section": "Changed" },
+          { "type": "refactor", "section": "Changed" },
+          { "type": "revert", "section": "Changed" },
+          { "type": "docs", "effect": "hidden" },
+          { "type": "style", "effect": "hidden" },
+          { "type": "test", "effect": "hidden" },
+          { "type": "build", "effect": "hidden" },
+          { "type": "ci", "effect": "hidden" },
+          { "type": "chore", "effect": "hidden" }
+        ]
+      }
+    }
+  }
+}

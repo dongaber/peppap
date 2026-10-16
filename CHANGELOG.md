@@ -1,9 +1,7 @@
 # Changelog
 
-All notable changes to Peppap. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and versions follow [SemVer](https://semver.org/).
-
-## [Unreleased]
+All notable changes to Peppap. Versions follow [SemVer](https://semver.org/); entries are generated from
+[Conventional Commits](https://www.conventionalcommits.org) by `bun run release`.
 
 ## [0.5.0] — 2026-10-16
 
@@ -68,7 +66,6 @@ First public release.
 - Settings window, launch at login.
 - Demo video recording for the README (made-up data, neutral background).
 
-[Unreleased]: https://github.com/dongaber/peppap/compare/v0.5.0...HEAD
 [0.5.0]: https://github.com/dongaber/peppap/releases/tag/v0.5.0
 [0.4.1]: https://github.com/dongaber/peppap/releases/tag/v0.4.1
 [0.4.0]: https://github.com/dongaber/peppap/releases/tag/v0.4.0
