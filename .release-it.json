@@ -8,7 +8,8 @@
     "requireCleanWorkingDir": true,
     "commitMessage": "chore(release): v${version}",
     "tagName": "v${version}",
-    "tagAnnotation": "Peppap ${version}"
+    "tagAnnotation": "Peppap ${version}",
+    "tagExclude": "*.*.*-*"
   },
   "npm": false,
   "github": {
@@ -47,6 +48,12 @@
           { "type": "ci", "effect": "hidden" },
           { "type": "chore", "effect": "hidden" }
         ]
+      },
+      "tagOpts": {
+        "skipUnstable": true
+      },
+      "writerOpts": {
+        "generateOn": null
       }
     }
   }

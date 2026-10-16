@@ -56,6 +56,6 @@ The tag starts the **Release** workflow (`.github/workflows/release.yml`):
 2. It publishes a GitHub Release with the `.dmg`, `.zip`, `SHA256SUMS.txt` and the notes from `CHANGELOG.md`.
 3. For a stable version, it updates the cask in [dongaber/homebrew-peppap](https://github.com/dongaber/homebrew-peppap) (deploy key in the `HOMEBREW_TAP_DEPLOY_KEY` secret).
 
-Pre-releases (`-beta.N`, `-rc.N`) are published as GitHub pre-releases. The in-app updater and Homebrew only see stable versions.
+Pre-releases (`-beta.N`, `-rc.N`) are published as GitHub pre-releases. The in-app updater and Homebrew only see stable versions. The changelog of a stable version lists everything since the previous stable one, including what already shipped in its pre-releases.
 
 The app's build number (`CFBundleVersion`) is the commit count.
