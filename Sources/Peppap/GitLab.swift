@@ -510,6 +510,8 @@ final class GitLabStore: ObservableObject {
     @Published private(set) var canAct: Bool?
     /// MR, с которыми только что что-то сделали: их изменения — не повод для уведомления.
     private var acted: Set<String> = []
+    /// Демо-ролик: выдуманный список, без сети; действия только изображаются.
+    private(set) var demoActive = false
 
     private(set) var token: String
     private var timer: Timer?
@@ -561,7 +563,7 @@ final class GitLabStore: ObservableObject {
     }
 
     func refresh() {
-        guard isConfigured, !loading, let host = Prefs.gitlabHostURL else { return }
+        guard isConfigured, !loading, !demoActive, let host = Prefs.gitlabHostURL else { return }
         loading = true
         let gen = generation
         let token = token
@@ -603,6 +605,7 @@ final class GitLabStore: ObservableObject {
     }
 
     func perform(_ action: MergeRequestAction, on mr: MergeRequest) {
+        if demoActive { return performInDemo(action, on: mr) }
         guard running[mr.id] == nil, let host = Prefs.gitlabHostURL else { return }
         running[mr.id] = action
         actionErrors[mr.id] = nil
@@ -623,6 +626,41 @@ final class GitLabStore: ObservableObject {
             // GitLab применяет часть изменений асинхронно (merge, rebase, пайплайн) — перечитываем чуть позже.
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.refresh() }
         }
+    }
+
+    private func performInDemo(_ action: MergeRequestAction, on mr: MergeRequest) {
+        running[mr.id] = action
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+            guard let self, self.demoActive else { return }
+            self.running[mr.id] = nil
+            self.update(mr.id) { action.applied(to: $0, me: self.snapshot?.username ?? "") }
+        }
+    }
+
+    // MARK: - Демо
+
+    /// Показать выдуманный список (сценарий демо). Настоящие данные возвращает endDemo().
+    func beginDemo(_ s: GitLab.Snapshot) {
+        configurationChanged()
+        demoActive = true
+        isConfigured = true
+        canAct = true
+        apply(s)
+        lastUpdate = Date()
+    }
+
+    /// Следующее «обновление» в демо: события и индикатор — как от настоящего GitLab.
+    func demoApply(_ s: GitLab.Snapshot) {
+        guard demoActive else { return }
+        apply(s)
+        lastUpdate = Date()
+    }
+
+    func endDemo() {
+        guard demoActive else { return }
+        demoActive = false
+        configurationChanged()
+        refresh()
     }
 
     private func update(_ id: String, _ change: (MergeRequest) -> MergeRequest?) {

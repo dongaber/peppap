@@ -1,8 +1,9 @@
 // Делает из записи демо (Peppap → «Записать демо-ролик…») файлы для README:
-//   docs/demo.mp4 — полный ролик (H.264), docs/demo.gif — короткий фрагмент.
+//   docs/demo.mp4 — полный ролик (H.264), docs/demo.gif — фрагмент,
+//   docs/screenshot-<имя>.png — кадры в полном разрешении (аргументы вида имя@секунда).
 //
 //   swiftc scripts/make-demo-media.swift -o /tmp/make-demo-media
-//   /tmp/make-demo-media ~/Movies/Peppap/peppap-demo.mov docs [начало, с] [длительность, с] [ширина, px] [кадров/с]
+//   /tmp/make-demo-media ~/Movies/Peppap/peppap-demo.mov docs [начало, с] [длительность, с] [ширина, px] [кадров/с] [имя@с …]
 import AVFoundation
 import AppKit
 import ImageIO
@@ -19,6 +20,11 @@ let gifStart = args.count > 3 ? Double(args[3])! : 3.5
 let gifLength = args.count > 4 ? Double(args[4])! : 22
 let gifWidth = args.count > 5 ? Int(args[5])! : 720
 let fps = args.count > 6 ? Double(args[6])! : 10
+let shots: [(String, Double)] = args.dropFirst(7).compactMap { arg in
+    let parts = arg.split(separator: "@")
+    guard parts.count == 2, let t = Double(parts[1]) else { return nil }
+    return (String(parts[0]), t)
+}
 try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
 
 let asset = AVURLAsset(url: input)
@@ -58,7 +64,21 @@ for i in 0..<frames {
 }
 CGImageDestinationFinalize(dest)
 
-for f in [mp4, gif] {
+// Скриншоты
+var outputs = [mp4, gif]
+for (name, t) in shots {
+    let png = outDir.appendingPathComponent("screenshot-\(name).png")
+    guard let cg = try? gen.copyCGImage(at: CMTime(seconds: t, preferredTimescale: 600), actualTime: nil),
+          let dest = CGImageDestinationCreateWithURL(png as CFURL, UTType.png.identifier as CFString, 1, nil) else {
+        print("Кадр \(name)@\(t) не получился")
+        continue
+    }
+    CGImageDestinationAddImage(dest, cg, nil)
+    CGImageDestinationFinalize(dest)
+    outputs.append(png)
+}
+
+for f in outputs {
     let size = (try? FileManager.default.attributesOfItem(atPath: f.path)[.size] as? Int) ?? 0
     print("\(f.lastPathComponent): \(String(format: "%.1f", Double(size) / 1_048_576)) МБ")
 }
