@@ -5,6 +5,8 @@ and versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-10-16
+
 ### Added
 - GitLab notifications: a new review request, a failed pipeline in your MR, or your MR becoming ready to merge plays a sound and briefly expands the notch (each can be turned off in Settings → GitLab).
 - While Claude is idle, the collapsed notch shows a merge icon with the number of unseen GitLab events; opening the notch goes straight to them.
@@ -66,7 +68,8 @@ First public release.
 - Settings window, launch at login.
 - Demo video recording for the README (made-up data, neutral background).
 
-[Unreleased]: https://github.com/dongaber/peppap/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/dongaber/peppap/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/dongaber/peppap/releases/tag/v0.5.0
 [0.4.1]: https://github.com/dongaber/peppap/releases/tag/v0.4.1
 [0.4.0]: https://github.com/dongaber/peppap/releases/tag/v0.4.0
 [0.3.0]: https://github.com/dongaber/peppap/releases/tag/v0.3.0
