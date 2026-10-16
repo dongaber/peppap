@@ -26,21 +26,41 @@ struct MergeRequest: Identifiable, Equatable {
         }
     }
 
+    /// Что GitLab разрешает текущему пользователю (userPermissions).
+    struct Permissions: Equatable {
+        var approve = false
+        var merge = false
+        var update = false
+        var pushToSourceBranch = false
+        var retryPipeline = false
+    }
+
     let iid: String
     let title: String
     let url: URL
     /// Полный путь проекта: group/subgroup/project.
     let project: String
     let author: String?
-    let draft: Bool
+    /// Из списка «Мои» (а не «Ревью»).
+    var mine = false
+    var draft: Bool
     let updatedAt: Date?
     let conflicts: Bool
     /// detailedMergeStatus как есть (MERGEABLE, NOT_APPROVED, …).
-    let mergeStatus: String?
+    var mergeStatus: String?
     let discussionsResolved: Bool
-    let pipeline: Pipeline?
+    var pipeline: Pipeline?
     let notes: Int
-    let approvedBy: [String]
+    var approvedBy: [String]
+    /// Последний коммит, который видел пользователь: merge не вольёт ничего новее.
+    var sha: String? = nil
+    /// Настройки слияния самого MR — как у кнопки Merge в GitLab.
+    var squash = false
+    var removeSourceBranch = false
+    /// Уже стоит «влить после пайплайна».
+    var autoMerge = false
+    var pipelineID: String? = nil
+    var can = Permissions()
 
     var id: String { url.absoluteString }
     /// Заголовок без «Draft:» / «WIP:» — черновик и так отмечен меткой.
@@ -72,8 +92,106 @@ struct MergeRequest: Identifiable, Equatable {
     }
 }
 
+/// Что можно сделать с MR прямо из челки.
+enum MergeRequestAction: CaseIterable, Equatable {
+    case merge, mergeWhenPipelineSucceeds, retryPipeline, rebase, approve, unapprove, markReady, markDraft
+
+    var title: String {
+        switch self {
+        case .merge: return L("Merge", "Влить")
+        case .mergeWhenPipelineSucceeds: return L("Merge when pipeline succeeds", "Влить после пайплайна")
+        case .retryPipeline: return L("Retry pipeline", "Перезапустить пайплайн")
+        case .rebase: return L("Rebase", "Rebase")
+        case .approve: return L("Approve", "Одобрить")
+        case .unapprove: return L("Revoke approval", "Отозвать аппрув")
+        case .markReady: return L("Mark as ready", "Снять черновик")
+        case .markDraft: return L("Mark as draft", "Сделать черновиком")
+        }
+    }
+
+    /// Короткая подпись для кнопки в строке.
+    var shortTitle: String {
+        switch self {
+        case .mergeWhenPipelineSucceeds: return L("Merge after pipeline", "Влить после CI")
+        case .retryPipeline: return L("Retry", "Перезапустить")
+        case .unapprove: return L("Revoke", "Отозвать")
+        case .markReady: return L("Ready", "Готов")
+        default: return title
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .merge, .mergeWhenPipelineSucceeds: return "arrow.triangle.merge"
+        case .retryPipeline: return "arrow.clockwise"
+        case .rebase: return "arrow.up.arrow.down"
+        case .approve: return "hand.thumbsup"
+        case .unapprove: return "hand.thumbsdown"
+        case .markReady: return "checkmark.circle"
+        case .markDraft: return "pencil"
+        }
+    }
+
+    /// Клавиша в режиме клавиатуры (латиница и та же клавиша в русской раскладке).
+    var keys: [String] {
+        switch self {
+        case .merge, .mergeWhenPipelineSucceeds: return ["m", "ь"]
+        case .retryPipeline: return ["p", "з"]
+        case .rebase: return ["b", "и"]
+        case .approve, .unapprove: return ["a", "ф"]
+        case .markReady, .markDraft: return ["d", "в"]
+        }
+    }
+
+    /// Необратимые действия подтверждаются повторным нажатием.
+    var needsConfirmation: Bool { self == .merge || self == .mergeWhenPipelineSucceeds }
+
+    /// Показывать кнопкой в строке (остальное — в контекстном меню и с клавиатуры).
+    var isPrimary: Bool { self != .markDraft }
+
+    func isAvailable(for mr: MergeRequest, me: String) -> Bool {
+        let approvedByMe = mr.approvedBy.contains(me)
+        switch self {
+        case .merge:
+            return mr.mine && mr.can.merge && mr.sha != nil && mr.status == .ready
+        case .mergeWhenPipelineSucceeds:
+            return mr.mine && mr.can.merge && mr.sha != nil && !mr.autoMerge && !mr.draft && !mr.conflicts
+                && mr.pipeline == .running
+        case .retryPipeline:
+            return mr.pipeline == .failed && mr.pipelineID != nil && mr.can.retryPipeline
+        case .rebase:
+            return mr.mergeStatus == "NEED_REBASE" && mr.can.pushToSourceBranch
+        case .approve:
+            return !mr.mine && mr.can.approve && !approvedByMe
+        case .unapprove:
+            return !mr.mine && approvedByMe
+        case .markReady:
+            return mr.mine && mr.draft && mr.can.update
+        case .markDraft:
+            return mr.mine && !mr.draft && mr.can.update
+        }
+    }
+
+    /// Как MR выглядит сразу после успешного действия — до следующего обновления списка.
+    func applied(to mr: MergeRequest, me: String) -> MergeRequest? {
+        var mr = mr
+        switch self {
+        case .merge: return nil // влит — из списка открытых пропадает
+        case .mergeWhenPipelineSucceeds: mr.autoMerge = true
+        case .retryPipeline: mr.pipeline = .running
+        case .rebase: mr.mergeStatus = "CHECKING"
+        case .approve: mr.approvedBy.append(me)
+        case .unapprove: mr.approvedBy.removeAll { $0 == me }
+        case .markReady: mr.draft = false; mr.mergeStatus = "CHECKING"
+        case .markDraft: mr.draft = true; mr.mergeStatus = "DRAFT_STATUS"
+        }
+        return mr
+    }
+}
+
 enum GitLabError: LocalizedError, Equatable {
     case unauthorized
+    case insufficientScope
     case http(Int)
     case api(String)
     case badResponse
@@ -82,7 +200,9 @@ enum GitLabError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .unauthorized:
-            return L("The token was rejected. Check it and its read_api scope.", "Токен не принят. Проверьте его и scope read_api.")
+            return L("The token was rejected. Check it and its scope (api or read_api).", "Токен не принят. Проверьте его и scope (api или read_api).")
+        case .insufficientScope:
+            return L("The token needs the api scope for actions.", "Для действий токену нужен scope api.")
         case .http(let code): return L("GitLab responded with HTTP \(code)", "GitLab ответил HTTP \(code)")
         case .api(let message): return "GitLab: \(message)"
         case .badResponse: return L("Unexpected response from GitLab", "Неожиданный ответ GitLab")
@@ -155,8 +275,10 @@ enum GitLab {
         }
         fragment mr on MergeRequest {
           iid title webUrl draft updatedAt conflicts detailedMergeStatus mergeableDiscussionsState userNotesCount
+          diffHeadSha squashOnMerge shouldRemoveSourceBranch forceRemoveSourceBranch autoMergeEnabled
+          userPermissions { canApprove canMerge updateMergeRequest pushToSourceBranch }
           project { fullPath }
-          headPipeline { status }
+          headPipeline { id status userPermissions { updatePipeline } }
           approvedBy { nodes { username } }
         }
         """
@@ -176,24 +298,115 @@ enum GitLab {
     }
 
     static func fetch(host: URL, token: String) async throws -> Snapshot {
-        var request = URLRequest(url: host.appendingPathComponent("api/graphql"))
-        request.httpMethod = "POST"
-        request.timeoutInterval = 20
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["query": query])
-
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await URLSession.shared.data(for: request)
-        } catch {
-            throw GitLabError.network(error.localizedDescription)
-        }
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let (data, code) = try await send(graphQL(host: host, token: token, query: query))
         if code == 401 || code == 403 { throw GitLabError.unauthorized }
         guard code == 200 else { throw GitLabError.http(code) }
         return try parse(data)
+    }
+
+    // MARK: - Запросы
+
+    static func graphQL(host: URL, token: String, query: String, variables: [String: Any] = [:]) -> URLRequest {
+        var body: [String: Any] = ["query": query]
+        if !variables.isEmpty { body["variables"] = variables }
+        return request(host.appendingPathComponent("api/graphql"), token: token, method: "POST",
+                       body: try? JSONSerialization.data(withJSONObject: body))
+    }
+
+    /// REST: путь проекта кодируется целиком («group%2Fproject»), как требует API v4.
+    static func rest(host: URL, token: String, method: String, project: String, path: String) -> URLRequest {
+        let encoded = project.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? project
+        return request(URL(string: host.absoluteString + "/api/v4/projects/\(encoded)/" + path)!, token: token, method: method, body: nil)
+    }
+
+    private static func request(_ url: URL, token: String, method: String, body: Data?) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = 20
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = body
+        return request
+    }
+
+    private static func send(_ request: URLRequest) async throws -> (Data, Int) {
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
+        } catch {
+            throw GitLabError.network(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Действия
+
+    static func request(for action: MergeRequestAction, on mr: MergeRequest, host: URL, token: String) -> URLRequest {
+        switch action {
+        case .merge, .mergeWhenPipelineSucceeds:
+            var input: [String: Any] = ["projectPath": mr.project, "iid": mr.iid, "sha": mr.sha ?? "",
+                                        "squash": mr.squash, "shouldRemoveSourceBranch": mr.removeSourceBranch]
+            if action == .mergeWhenPipelineSucceeds { input["strategy"] = "MERGE_WHEN_PIPELINE_SUCCEEDS" }
+            return graphQL(host: host, token: token,
+                           query: "mutation($input: MergeRequestAcceptInput!) { result: mergeRequestAccept(input: $input) { errors } }",
+                           variables: ["input": input])
+        case .retryPipeline:
+            return graphQL(host: host, token: token,
+                           query: "mutation($input: PipelineRetryInput!) { result: pipelineRetry(input: $input) { errors } }",
+                           variables: ["input": ["id": mr.pipelineID ?? ""]])
+        case .markReady, .markDraft:
+            return graphQL(host: host, token: token,
+                           query: "mutation($input: MergeRequestSetDraftInput!) { result: mergeRequestSetDraft(input: $input) { errors } }",
+                           variables: ["input": ["projectPath": mr.project, "iid": mr.iid, "draft": action == .markDraft]])
+        case .approve, .unapprove:
+            return rest(host: host, token: token, method: "POST", project: mr.project,
+                        path: "merge_requests/\(mr.iid)/" + (action == .approve ? "approve" : "unapprove"))
+        case .rebase:
+            return rest(host: host, token: token, method: "PUT", project: mr.project, path: "merge_requests/\(mr.iid)/rebase")
+        }
+    }
+
+    static func perform(_ action: MergeRequestAction, on mr: MergeRequest, host: URL, token: String) async throws {
+        let request = request(for: action, on: mr, host: host, token: token)
+        let (data, code) = try await send(request)
+        try checkActionResponse(data, status: code, isGraphQL: request.url?.path.hasSuffix("/api/graphql") == true)
+    }
+
+    /// Ошибки действий: HTTP, scope токена, ошибки GraphQL верхнего уровня и errors в ответе мутации.
+    static func checkActionResponse(_ data: Data, status: Int, isGraphQL: Bool) throws {
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        if (json?["error"] as? String) == "insufficient_scope" { throw GitLabError.insufficientScope }
+        if status == 401 { throw GitLabError.unauthorized }
+        guard (200..<300).contains(status) else {
+            if let message = restMessage(json) { throw GitLabError.api(message) }
+            throw GitLabError.http(status)
+        }
+        guard isGraphQL else { return }
+        guard let json else { throw GitLabError.badResponse }
+        if let errors = json["errors"] as? [[String: Any]], let message = errors.first?["message"] as? String {
+            throw GitLabError.api(message)
+        }
+        let result = (json["data"] as? [String: Any])?["result"] as? [String: Any]
+        if let errors = result?["errors"] as? [String], let first = errors.first { throw GitLabError.api(first) }
+    }
+
+    /// REST отдаёт ошибку как {"message": "…"}, {"message": ["…"]} или {"message": {"поле": ["…"]}}.
+    private static func restMessage(_ json: [String: Any]?) -> String? {
+        switch json?["message"] ?? json?["error"] {
+        case let s as String: return s
+        case let a as [String]: return a.first
+        case let d as [String: Any]:
+            return d.compactMap { key, value in ((value as? [String])?.first).map { "\(key) \($0)" } }.first
+        default: return nil
+        }
+    }
+
+    /// Scope токена: без api действия скрыты. nil — узнать не удалось (например, не personal access token).
+    static func tokenScopes(host: URL, token: String) async -> Set<String>? {
+        let url = URL(string: host.absoluteString + "/api/v4/personal_access_tokens/self")!
+        guard let (data, code) = try? await send(request(url, token: token, method: "GET", body: nil)), code == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let scopes = json["scopes"] as? [String] else { return nil }
+        return Set(scopes)
     }
 
     static func parse(_ data: Data) throws -> Snapshot {
@@ -204,7 +417,11 @@ enum GitLab {
         }
         // Без токена (или с недействительным) GitLab отдаёт currentUser: null.
         guard let user, let username = user["username"] as? String else { throw GitLabError.unauthorized }
-        let authored = nodes(user["authored"]).compactMap(mergeRequest)
+        let authored = nodes(user["authored"]).compactMap(mergeRequest).map { mr -> MergeRequest in
+            var mr = mr
+            mr.mine = true
+            return mr
+        }
         let mine = Set(authored.map(\.id))
         let review = nodes(user["review"]).compactMap(mergeRequest).filter { !mine.contains($0.id) }
         return Snapshot(username: username, authored: authored, review: review)
@@ -218,8 +435,10 @@ enum GitLab {
         guard let iid = n["iid"] as? String, let title = n["title"] as? String,
               let url = (n["webUrl"] as? String).flatMap(URL.init(string:)) else { return nil }
         let project = ((n["project"] as? [String: Any])?["fullPath"] as? String) ?? ""
-        let pipeline = ((n["headPipeline"] as? [String: Any])?["status"] as? String).flatMap(pipelineStatus)
-        return MergeRequest(
+        let head = n["headPipeline"] as? [String: Any]
+        let pipeline = (head?["status"] as? String).flatMap(pipelineStatus)
+        let perms = n["userPermissions"] as? [String: Any]
+        var mr = MergeRequest(
             iid: iid,
             title: title,
             url: url,
@@ -234,6 +453,19 @@ enum GitLab {
             notes: n["userNotesCount"] as? Int ?? 0,
             approvedBy: nodes(n["approvedBy"]).compactMap { $0["username"] as? String }
         )
+        mr.sha = n["diffHeadSha"] as? String
+        mr.squash = n["squashOnMerge"] as? Bool ?? false
+        mr.removeSourceBranch = n["shouldRemoveSourceBranch"] as? Bool ?? n["forceRemoveSourceBranch"] as? Bool ?? false
+        mr.autoMerge = n["autoMergeEnabled"] as? Bool ?? false
+        mr.pipelineID = head?["id"] as? String
+        mr.can = MergeRequest.Permissions(
+            approve: perms?["canApprove"] as? Bool ?? false,
+            merge: perms?["canMerge"] as? Bool ?? false,
+            update: perms?["updateMergeRequest"] as? Bool ?? false,
+            pushToSourceBranch: perms?["pushToSourceBranch"] as? Bool ?? false,
+            retryPipeline: (head?["userPermissions"] as? [String: Any])?["updatePipeline"] as? Bool ?? false
+        )
+        return mr
     }
 
     private static func pipelineStatus(_ s: String) -> MergeRequest.Pipeline? {
@@ -270,6 +502,14 @@ final class GitLabStore: ObservableObject {
     @Published private(set) var attention: [String: GitLab.Event.Kind] = [:]
     /// События очередного обновления (уже отфильтрованные по настройкам).
     var onEvents: (([GitLab.Event]) -> Void)?
+    /// Действия, которые выполняются сейчас (по id MR).
+    @Published private(set) var running: [String: MergeRequestAction] = [:]
+    /// Ошибка последнего действия по id MR; через несколько секунд пропадает.
+    @Published private(set) var actionErrors: [String: String] = [:]
+    /// nil — scope ещё не проверен или не известен; false — токен только для чтения.
+    @Published private(set) var canAct: Bool?
+    /// MR, с которыми только что что-то сделали: их изменения — не повод для уведомления.
+    private var acted: Set<String> = []
 
     private(set) var token: String
     private var timer: Timer?
@@ -306,6 +546,10 @@ final class GitLabStore: ObservableObject {
         snapshot = nil
         error = nil
         attention = [:]
+        running = [:]
+        actionErrors = [:]
+        canAct = nil
+        acted = []
         lastUpdate = nil
         loading = false
         isConfigured = Self.configured(token: token)
@@ -321,6 +565,7 @@ final class GitLabStore: ObservableObject {
         loading = true
         let gen = generation
         let token = token
+        if canAct == nil { checkScopes(host: host, token: token, generation: gen) }
         Task {
             let result: Result<GitLab.Snapshot, Error>
             do { result = .success(try await GitLab.fetch(host: host, token: token)) } catch { result = .failure(error) }
@@ -338,13 +583,69 @@ final class GitLabStore: ObservableObject {
 
     /// Новый список: события относительно прошлого, без событий при первой загрузке.
     func apply(_ s: GitLab.Snapshot) {
-        let events = snapshot.map { GitLab.events(from: $0, to: s) }?.filter { Prefs.gitlabNotifies($0.kind) } ?? []
+        let events = snapshot.map { GitLab.events(from: $0, to: s) }?
+            .filter { Prefs.gitlabNotifies($0.kind) && !acted.contains($0.mr.id) } ?? []
+        acted = []
         snapshot = s
         error = nil
         let ids = Set(s.all.map(\.id))
         attention = attention.filter { ids.contains($0.key) } // закрытые и влитые MR больше не важны
         for e in events { attention[e.mr.id] = max(e.kind, attention[e.mr.id] ?? e.kind) }
         if !events.isEmpty { onEvents?(events) }
+    }
+
+    // MARK: - Действия
+
+    /// Действия, доступные с этим MR: по правам в GitLab и scope токена.
+    func actions(for mr: MergeRequest) -> [MergeRequestAction] {
+        guard canAct != false, let me = snapshot?.username else { return [] }
+        return MergeRequestAction.allCases.filter { $0.isAvailable(for: mr, me: me) }
+    }
+
+    func perform(_ action: MergeRequestAction, on mr: MergeRequest) {
+        guard running[mr.id] == nil, let host = Prefs.gitlabHostURL else { return }
+        running[mr.id] = action
+        actionErrors[mr.id] = nil
+        let gen = generation
+        let token = token
+        Task {
+            var failure: Error?
+            do { try await GitLab.perform(action, on: mr, host: host, token: token) } catch { failure = error }
+            guard gen == generation else { return }
+            running[mr.id] = nil
+            if let failure {
+                if (failure as? GitLabError) == .insufficientScope { canAct = false }
+                showActionError(failure.localizedDescription, for: mr.id)
+                return
+            }
+            acted.insert(mr.id)
+            update(mr.id) { action.applied(to: $0, me: self.snapshot?.username ?? "") }
+            // GitLab применяет часть изменений асинхронно (merge, rebase, пайплайн) — перечитываем чуть позже.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.refresh() }
+        }
+    }
+
+    private func update(_ id: String, _ change: (MergeRequest) -> MergeRequest?) {
+        guard var s = snapshot else { return }
+        s.authored = s.authored.compactMap { $0.id == id ? change($0) : $0 }
+        s.review = s.review.compactMap { $0.id == id ? change($0) : $0 }
+        snapshot = s
+    }
+
+    private func showActionError(_ message: String, for id: String) {
+        actionErrors[id] = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
+            if self?.actionErrors[id] == message { self?.actionErrors[id] = nil }
+        }
+    }
+
+    private func checkScopes(host: URL, token: String, generation gen: Int) {
+        Task {
+            let scopes = await GitLab.tokenScopes(host: host, token: token)
+            guard gen == generation else { return }
+            // Не удалось узнать — показываем действия, ошибку покажет само действие.
+            canAct = scopes.map { $0.contains("api") } ?? true
+        }
     }
 
     func markSeen() {
