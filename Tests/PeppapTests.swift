@@ -16,6 +16,7 @@ enum PeppapTests {
             ("Report", reportTests),
             ("L10n", l10nTests),
             ("Updater", updaterTests),
+            ("GitLab", gitlabTests),
         ])
     }
 }
@@ -380,5 +381,70 @@ let updaterTests: [(String, @MainActor () throws -> Void)] = [
         expect(!Updater.isNewer("0.3.0", than: "0.3.0"))
         expect(!Updater.isNewer("0.3", than: "0.3.0"))
         expect(!Updater.isNewer("0.2.9", than: "0.3.0"))
+    }),
+]
+
+// MARK: - GitLab
+
+private func mrNode(_ iid: String, project: String = "team/app", extra: [String: Any] = [:]) -> [String: Any] {
+    var n: [String: Any] = ["iid": iid, "title": "MR \(iid)", "webUrl": "https://git.example.com/\(project)/-/merge_requests/\(iid)",
+                            "draft": false, "updatedAt": "2026-10-16T10:12:33Z", "conflicts": false,
+                            "detailedMergeStatus": "MERGEABLE", "mergeableDiscussionsState": true, "userNotesCount": 3,
+                            "project": ["fullPath": project], "headPipeline": ["status": "SUCCESS"],
+                            "approvedBy": ["nodes": [["username": "kate"]]]]
+    for (k, v) in extra { n[k] = v }
+    return n
+}
+
+private func mergeRequest(_ extra: [String: Any]) throws -> MergeRequest {
+    let json: [String: Any] = ["data": ["currentUser": ["username": "me", "authored": ["nodes": [mrNode("1", extra: extra)]],
+                                                        "review": ["nodes": []]]]]
+    return try GitLab.parse(JSONSerialization.data(withJSONObject: json)).authored[0]
+}
+
+let gitlabTests: [(String, @MainActor () throws -> Void)] = [
+    ("нормализация хоста", {
+        expectEqual(GitLab.normalizedHost("git.example.com")?.absoluteString, "https://git.example.com")
+        expectEqual(GitLab.normalizedHost(" https://git.example.com/ ")?.absoluteString, "https://git.example.com")
+        expectEqual(GitLab.normalizedHost("https://git.example.com/api/v4")?.absoluteString, "https://git.example.com")
+        expectEqual(GitLab.normalizedHost("http://host:8080/gitlab/")?.absoluteString, "http://host:8080/gitlab")
+        expect(GitLab.normalizedHost("") == nil)
+        expect(GitLab.normalizedHost("ftp://host") == nil)
+    }),
+    ("разбор ответа: свои MR и ревью без повторов", {
+        let json: [String: Any] = ["data": ["currentUser": [
+            "username": "me",
+            "authored": ["nodes": [mrNode("1"), mrNode("2", project: "group/sub/api")]],
+            "review": ["nodes": [mrNode("1"), mrNode("7", extra: ["author": ["username": "kate"]])]],
+        ]]]
+        let s = try GitLab.parse(JSONSerialization.data(withJSONObject: json))
+        expectEqual(s.username, "me")
+        expectEqual(s.authored.map(\.iid), ["1", "2"])
+        expectEqual(s.review.map(\.iid), ["7"])
+        expectEqual(s.review[0].author, "kate")
+        expectEqual(s.authored[1].reference, "api!2")
+        expectEqual(s.authored[0].pipeline, .success)
+        expectEqual(s.authored[0].approvedBy, ["kate"])
+        expectEqual(s.authored[0].notes, 3)
+        expect(s.authored[0].updatedAt != nil)
+    }),
+    ("ошибки: пустой пользователь и ошибки GraphQL", {
+        let anon = try JSONSerialization.data(withJSONObject: ["data": ["currentUser": NSNull()]])
+        expect((try? GitLab.parse(anon)) == nil)
+        do { _ = try GitLab.parse(anon); expect(false) } catch { expectEqual(error as? GitLabError, .unauthorized) }
+        let bad = try JSONSerialization.data(withJSONObject: ["errors": [["message": "Field 'x' doesn't exist"]]])
+        do { _ = try GitLab.parse(bad); expect(false) } catch { expectEqual(error as? GitLabError, .api("Field 'x' doesn't exist")) }
+        do { _ = try GitLab.parse(Data("<html>".utf8)); expect(false) } catch { expectEqual(error as? GitLabError, .badResponse) }
+    }),
+    ("статус MR", {
+        expectEqual(try mergeRequest([:]).status, .ready)
+        expectEqual(try mergeRequest(["conflicts": true]).status, .conflict)
+        expectEqual(try mergeRequest(["headPipeline": ["status": "FAILED"], "detailedMergeStatus": "CI_MUST_PASS"]).status, .pipelineFailed)
+        expectEqual(try mergeRequest(["headPipeline": ["status": "RUNNING"], "detailedMergeStatus": "CI_STILL_RUNNING"]).status, .pipelineRunning)
+        expectEqual(try mergeRequest(["detailedMergeStatus": "NOT_APPROVED"]).status, .approval)
+        expectEqual(try mergeRequest(["detailedMergeStatus": "DISCUSSIONS_NOT_RESOLVED"]).status, .discussions)
+        expectEqual(try mergeRequest(["draft": true, "detailedMergeStatus": "DRAFT_STATUS"]).status, .draft)
+        expectEqual(try mergeRequest(["headPipeline": NSNull(), "detailedMergeStatus": "CHECKING"]).status, .checking)
+        expectEqual(try mergeRequest(["headPipeline": NSNull()]).pipeline, nil)
     }),
 ]

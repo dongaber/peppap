@@ -4,6 +4,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var store: SessionStore
+    @ObservedObject var gitlab: GitLabStore
     let onInstallHooks: () -> Void
     let onUninstallHooks: () -> Void
     let onHotKeyChange: (HotKeyPreset) -> Void
@@ -26,6 +27,10 @@ struct SettingsView: View {
     @AppStorage(Prefs.Key.haptics) private var haptics = true
     @AppStorage(Prefs.Key.quickReplies) private var quickReplies = Prefs.defaultQuickReplies
     @AppStorage(Prefs.Key.language) private var language = AppLanguage.system.rawValue
+    @AppStorage(Prefs.Key.gitlabEnabled) private var gitlabEnabled = true
+    @AppStorage(Prefs.Key.gitlabHost) private var gitlabHost = ""
+    @AppStorage(Prefs.Key.gitlabInterval) private var gitlabInterval = 120.0
+    @State private var gitlabToken = ""
     @AppStorage(Updater.checkKey) private var checkUpdates = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
@@ -104,6 +109,8 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            gitlabSection
+
             Section(L("Notch", "Челка")) {
                 Picker(L("Hotkey", "Горячая клавиша"), selection: $hotkey) {
                     ForEach(HotKeyPreset.allCases) { Text($0.title).tag($0.rawValue) }
@@ -152,6 +159,76 @@ struct SettingsView: View {
         }
         .formStyle(.grouped) // прокручивается сам, если не помещается
         .frame(minWidth: 480, idealWidth: 540, minHeight: 320, idealHeight: 640)
+    }
+
+    private var gitlabSection: some View {
+        Section {
+            Toggle(L("Show my merge requests in the notch", "Показывать мои merge requests в челке"), isOn: $gitlabEnabled)
+                .onChange(of: gitlabEnabled) { _, _ in
+                    gitlab.configurationChanged()
+                    gitlab.refresh()
+                }
+            Group {
+                TextField(L("Host", "Хост"), text: $gitlabHost, prompt: Text("https://gitlab.example.com"))
+                    .onChange(of: gitlabHost) { _, _ in gitlab.configurationChanged() }
+                    .onSubmit { gitlab.refresh() }
+                LabeledContent(L("Access token", "Токен доступа")) {
+                    HStack {
+                        SecureField("", text: $gitlabToken, prompt: Text("glpat-…"))
+                            .labelsHidden()
+                            .onChange(of: gitlabToken) { _, value in gitlab.setToken(value) }
+                            .onSubmit { gitlab.refresh() }
+                        if let url = GitLab.normalizedHost(gitlabHost).map(tokenPageURL) {
+                            Button(L("Create…", "Создать…")) { NSWorkspace.shared.open(url) }
+                                .help(L("Open the GitLab page for a new token with the read_api scope",
+                                        "Открыть в GitLab страницу нового токена со scope read_api"))
+                        }
+                    }
+                }
+                Picker(L("Refresh every", "Обновлять каждые"), selection: $gitlabInterval) {
+                    Text(L("1 min", "1 мин")).tag(60.0)
+                    Text(L("2 min", "2 мин")).tag(120.0)
+                    Text(L("5 min", "5 мин")).tag(300.0)
+                    Text(L("10 min", "10 мин")).tag(600.0)
+                }
+                LabeledContent(L("Connection", "Подключение")) {
+                    HStack {
+                        gitlabStatus
+                        Spacer()
+                        Button(L("Check", "Проверить")) { gitlab.refresh() }
+                            .disabled(!gitlab.isConfigured || gitlab.loading)
+                    }
+                }
+            }
+            .disabled(!gitlabEnabled)
+        } header: {
+            Text("GitLab")
+        } footer: {
+            Text(L("A personal access token with the read_api scope. It is stored in the Keychain.",
+                   "Personal access token со scope read_api. Хранится в связке ключей."))
+                .foregroundStyle(.secondary)
+        }
+        .onAppear { gitlabToken = gitlab.token }
+    }
+
+    @ViewBuilder private var gitlabStatus: some View {
+        if gitlab.loading {
+            ProgressView().controlSize(.small)
+        } else if let error = gitlab.error {
+            Text(error).foregroundStyle(.red).lineLimit(2)
+        } else if let s = gitlab.snapshot {
+            Label("@\(s.username)", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+        } else {
+            Text(gitlab.isConfigured ? L("not checked yet", "ещё не проверено") : L("enter the host and token", "укажите хост и токен"))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Страница создания токена с заполненными именем и scope.
+    private func tokenPageURL(_ host: URL) -> URL {
+        var c = URLComponents(url: host.appendingPathComponent("-/user_settings/personal_access_tokens"), resolvingAgainstBaseURL: false)!
+        c.queryItems = [URLQueryItem(name: "name", value: "Peppap"), URLQueryItem(name: "scopes", value: "read_api")]
+        return c.url!
     }
 
     @ViewBuilder private var soundOptions: some View {

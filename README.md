@@ -28,6 +28,7 @@ Claude Code session status right in your MacBook notch.
 - **Hotkey** (⌃⌥C by default) opens the notch with keyboard control: ↑↓ select, ⏎ jump, Tab switch tabs, A/S/D/T answer a permission request, Esc close.
 - **Notifications:** sound, trackpad haptics and auto-expanding notch. Sound can be limited to long tasks. Peppap stays quiet during calls (microphone in use) and in full-screen apps.
 - **Resilience:** closed terminals disappear from the list, Esc interrupts are detected from the transcript, and live sessions are restored after Peppap restarts.
+- **GitLab merge requests tab:** your open MRs and the ones waiting for your review, with pipeline status, approvals, comments and what blocks the merge. Works with self-hosted GitLab (CE or EE, GraphQL API).
 - **Right-click a session** to pin it, rename it, or hide it until its next activity.
 - **English and Russian interface**, following the system language or switched in Settings without a restart.
 - **Settings window** (✦ menu → Settings…).
@@ -64,6 +65,12 @@ Requires macOS 14 or later, Apple Silicon or Intel.
 The hook sends event JSON to `127.0.0.1:47821`. If Peppap isn't running, `curl` exits silently and Claude Code is unaffected.
 
 The ✦ menu also has: sound toggle, settings, weekly report export, demo, demo recording, and disconnecting the hooks (which restores your previous status line).
+
+### GitLab
+
+1. Create a personal access token with the `read_api` scope (Settings → GitLab → **Create…** opens the right page).
+2. Enter your GitLab host (e.g. `https://gitlab.example.com`) and the token in Settings → GitLab. The token is stored in the Keychain.
+3. The **MR** tab appears in the notch. It refreshes every 2 minutes (configurable) and when you open it; press R to refresh, ⏎ or click to open an MR.
 
 ## Building from source
 

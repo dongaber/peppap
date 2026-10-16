@@ -5,6 +5,9 @@ and versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- GitLab merge requests tab: your open MRs and review requests with pipeline status, approvals, comments and merge blockers. Host, token (kept in the Keychain) and refresh interval are set in Settings → GitLab.
+
 ## [0.4.0] — 2026-10-15
 
 ### Added

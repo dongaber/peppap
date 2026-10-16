@@ -19,6 +19,9 @@ enum Prefs {
         static let hotkey = "hotkey"
         static let haptics = "haptics"
         static let quickReplies = "quickReplies"
+        static let gitlabEnabled = "gitlabEnabled"
+        static let gitlabHost = "gitlabHost"
+        static let gitlabInterval = "gitlabInterval"
         static let language = L10n.key
     }
 
@@ -41,6 +44,8 @@ enum Prefs {
             Key.collapseDelay: 0.3,
             Key.hotkey: HotKeyPreset.ctrlOptC.rawValue,
             Key.haptics: true,
+            Key.gitlabEnabled: true,
+            Key.gitlabInterval: 120.0,
         ])
     }
 
@@ -68,5 +73,8 @@ enum Prefs {
         (d.string(forKey: Key.quickReplies) ?? defaultQuickReplies).split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
+    static var gitlabEnabled: Bool { d.bool(forKey: Key.gitlabEnabled) }
+    static var gitlabHostURL: URL? { GitLab.normalizedHost(d.string(forKey: Key.gitlabHost) ?? "") }
+    static var gitlabInterval: Double { d.double(forKey: Key.gitlabInterval) }
     static var hotkey: HotKeyPreset { HotKeyPreset(rawValue: d.string(forKey: Key.hotkey) ?? "") ?? .ctrlOptC }
 }

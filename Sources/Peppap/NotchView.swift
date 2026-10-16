@@ -40,10 +40,12 @@ struct NotchActions {
     var rename: (ClaudeSession) -> Void
     var send: (ClaudeSession, String) -> Void
     var installUpdate: () -> Void
+    var openMergeRequest: (MergeRequest) -> Void
 }
 
 struct NotchView: View {
     @ObservedObject var store: SessionStore
+    @ObservedObject var gitlab: GitLabStore
     @ObservedObject var ui: NotchUIState
     @ObservedObject var updater: Updater
     let actions: NotchActions
@@ -71,7 +73,7 @@ struct NotchView: View {
 
     @ViewBuilder private var content: some View {
         if ui.isExpanded {
-            ExpandedView(store: store, ui: ui, updater: updater, actions: actions)
+            ExpandedView(store: store, gitlab: gitlab, ui: ui, updater: updater, actions: actions)
                 .frame(width: max(540, ui.notchWidth + 330))
                 // Фигура растягивается пружиной, содержимое проявляется чуть позже и быстро гаснет при закрытии.
                 .transition(.asymmetric(
@@ -162,6 +164,7 @@ private struct Badge: View {
 
 private struct ExpandedView: View {
     @ObservedObject var store: SessionStore
+    @ObservedObject var gitlab: GitLabStore
     @ObservedObject var ui: NotchUIState
     @ObservedObject var updater: Updater
     let actions: NotchActions
@@ -171,7 +174,7 @@ private struct ExpandedView: View {
             // Верхняя полоса по бокам от аппаратной челки.
             HStack(spacing: 0) {
                 HStack(spacing: 2) {
-                    ForEach(NotchTab.allCases, id: \.self) { tab in
+                    ForEach(NotchTab.visible(gitlab: gitlab.isConfigured), id: \.self) { tab in
                         TabButton(title: tab.title, selected: ui.tab == tab) { ui.tab = tab }
                     }
                 }
@@ -184,6 +187,12 @@ private struct ExpandedView: View {
             case .sessions: sessionsTab
             case .today: TodayTab(store: store)
             case .week: WeekTab(store: store)
+            case .mergeRequests:
+                if gitlab.isConfigured {
+                    MergeRequestsTab(gitlab: gitlab, ui: ui, actions: actions)
+                } else {
+                    sessionsTab
+                }
             }
 
             if ui.pinned {
@@ -225,6 +234,7 @@ private struct ExpandedView: View {
     }
 
     private var summary: String {
+        if ui.tab == .mergeRequests && gitlab.isConfigured { return gitlab.summary }
         let working = store.visibleSessions.filter { $0.phase == .working }.count
         let total = store.visibleSessions.count
         if total == 0 { return L("no sessions", "нет сессий") }
@@ -233,6 +243,7 @@ private struct ExpandedView: View {
 
     private var hint: String {
         let base = L("↑↓ select · ⏎ open · Tab tabs · Esc close", "↑↓ выбор · ⏎ перейти · Tab вкладки · Esc закрыть")
+        if ui.tab == .mergeRequests { return L("R refresh · ", "R обновить · ") + base }
         if let s = store.sessions.first(where: { $0.id == ui.selectedID }), let p = s.pending, p.questions.isEmpty {
             return L("A allow · S always · D deny · T terminal · ", "A разрешить · S всегда · D отклонить · T в терминале · ") + base
         }
@@ -1044,6 +1055,213 @@ struct ClaudeSpinner: View {
                 .font(.system(size: size, weight: .bold))
                 .foregroundStyle(Color.claude)
                 .frame(width: size + 2, height: size + 2)
+        }
+    }
+}
+
+// MARK: - Merge requests
+
+private struct MergeRequestsTab: View {
+    @ObservedObject var gitlab: GitLabStore
+    @ObservedObject var ui: NotchUIState
+    let actions: NotchActions
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let error = gitlab.error {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+                    Text(error).font(.system(size: 11)).foregroundStyle(Ink.primary.opacity(0.85)).lineLimit(2)
+                    Spacer()
+                }
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.yellow.opacity(0.12)))
+            }
+            if let s = gitlab.snapshot {
+                if s.all.count > 6 {
+                    ScrollView { lists(s) }.frame(height: 440)
+                } else {
+                    lists(s)
+                }
+            } else if gitlab.error == nil {
+                ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 44)
+            }
+            footer
+        }
+        .onAppear { gitlab.refreshIfStale(maxAge: 60) }
+    }
+
+    private func lists(_ s: GitLab.Snapshot) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SectionTitle(text: L("My merge requests", "Мои merge requests"), count: s.authored.count)
+            if s.authored.isEmpty {
+                Text(L("No open merge requests", "Открытых merge requests нет"))
+                    .font(.system(size: 12)).foregroundStyle(Ink.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 36)
+            }
+            ForEach(s.authored) { mr in row(mr, me: s.username) }
+            if !s.review.isEmpty {
+                SectionTitle(text: L("Review requested", "Ждут моего ревью"), count: s.review.count).padding(.top, 4)
+                ForEach(s.review) { mr in row(mr, me: s.username) }
+            }
+        }
+    }
+
+    private func row(_ mr: MergeRequest, me: String) -> some View {
+        MergeRequestRow(mr: mr, approvedByMe: mr.approvedBy.contains(me), selected: ui.selectedMR == mr.id) {
+            actions.openMergeRequest(mr)
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: 6) {
+            if let host = Prefs.gitlabHostURL?.host {
+                Text(host)
+            }
+            if let last = gitlab.lastUpdate {
+                Text("· " + L("updated ", "обновлено ") + Fmt.ago(last))
+            }
+            Spacer()
+            if gitlab.loading {
+                ProgressView().controlSize(.mini)
+            } else {
+                Button { gitlab.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(.plain)
+                    .help(L("Refresh", "Обновить"))
+            }
+        }
+        .font(.system(size: 10))
+        .foregroundStyle(Ink.muted)
+    }
+}
+
+private struct SectionTitle: View {
+    let text: String
+    let count: Int
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(text).font(.system(size: 11, weight: .semibold)).foregroundStyle(Ink.secondary)
+            Text("\(count)").font(.system(size: 10, weight: .semibold)).foregroundStyle(Ink.muted)
+        }
+    }
+}
+
+private struct MergeRequestRow: View {
+    let mr: MergeRequest
+    let approvedByMe: Bool
+    let selected: Bool
+    let open: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            PipelineIcon(pipeline: mr.pipeline).frame(width: 18)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(mr.title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(mr.draft ? Ink.secondary : Ink.primary)
+                        .lineLimit(1)
+                    if mr.draft { Chip(icon: "pencil", text: L("Draft", "Черновик")) }
+                }
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Ink.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(mr.status.label)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(color(mr.status))
+                HStack(spacing: 4) {
+                    if !mr.approvedBy.isEmpty {
+                        Chip(icon: approvedByMe ? "checkmark" : "hand.thumbsup", text: "\(mr.approvedBy.count)")
+                            .help(L("Approved by: ", "Одобрили: ") + mr.approvedBy.map { "@" + $0 }.joined(separator: ", "))
+                    }
+                    if mr.notes > 0 {
+                        Chip(icon: "bubble.left", text: "\(mr.notes)")
+                            .help(mr.discussionsResolved ? L("Comments", "Комментарии") : L("Comments · open threads", "Комментарии · есть нерешённые треды"))
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white.opacity(hover || selected ? 0.11 : 0.05))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(selected ? Color.claude.opacity(0.6) : .clear, lineWidth: 1))
+        )
+        .contentShape(Rectangle())
+        .onHover { hover = $0 }
+        .onTapGesture(perform: open)
+        .help(mr.project + "!" + mr.iid)
+        .contextMenu {
+            Button(L("Open in browser", "Открыть в браузере"), action: open)
+            Button(L("Copy link", "Скопировать ссылку")) {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(mr.url.absoluteString, forType: .string)
+            }
+        }
+    }
+
+    private var subtitle: String {
+        var parts = [mr.reference]
+        if let author = mr.author { parts.append("@" + author) }
+        if let updated = mr.updatedAt { parts.append(Fmt.ago(updated)) }
+        return parts.joined(separator: " · ")
+    }
+
+    private func color(_ s: MergeRequest.Status) -> Color {
+        switch s {
+        case .ready: return .green
+        case .conflict, .pipelineFailed: return .red
+        case .rebase, .discussions, .approval: return .yellow
+        case .pipelineRunning: return .claude
+        case .draft, .blocked, .checking: return Ink.muted
+        }
+    }
+}
+
+private struct PipelineIcon: View {
+    let pipeline: MergeRequest.Pipeline?
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 14))
+            .foregroundStyle(color)
+            .help(help)
+    }
+
+    private var symbol: String {
+        switch pipeline {
+        case .success: return "checkmark.circle.fill"
+        case .failed: return "xmark.circle.fill"
+        case .running: return "clock.fill"
+        case .canceled: return "slash.circle"
+        case .manual: return "gearshape.circle"
+        case nil: return "arrow.triangle.pull"
+        }
+    }
+
+    private var color: Color {
+        switch pipeline {
+        case .success: return .green
+        case .failed: return .red
+        case .running: return .claude
+        case .canceled, .manual, nil: return Ink.muted
+        }
+    }
+
+    private var help: String {
+        switch pipeline {
+        case .success: return L("Pipeline passed", "Пайплайн прошёл")
+        case .failed: return L("Pipeline failed", "Пайплайн упал")
+        case .running: return L("Pipeline running", "Пайплайн идёт")
+        case .canceled: return L("Pipeline canceled or skipped", "Пайплайн отменён или пропущен")
+        case .manual: return L("Pipeline waits for a manual job", "Пайплайн ждёт ручного запуска")
+        case nil: return L("No pipeline", "Без пайплайна")
         }
     }
 }

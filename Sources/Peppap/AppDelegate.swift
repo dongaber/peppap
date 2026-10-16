@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let settings = SettingsWindow()
     private let onboarding = OnboardingWindow()
     private let updater = Updater()
+    private var gitlab: GitLabStore!
     private var server: EventServer?
     private var notch: NotchController!
     private var hotKey: HotKey?
@@ -22,12 +23,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Prefs.register()
-        notch = NotchController(store: store, updater: updater, actions: NotchActions(
+        gitlab = GitLabStore()
+        notch = NotchController(store: store, gitlab: gitlab, updater: updater, actions: NotchActions(
             select: { [weak self] s in self?.select(s) },
             installHooks: { [weak self] in self?.installHooks() },
             rename: { [weak self] s in self?.rename(s) },
             send: { [weak self] s, text in self?.send(text, to: s) },
-            installUpdate: { [weak self] in self?.installAvailableUpdate() }
+            installUpdate: { [weak self] in self?.installAvailableUpdate() },
+            openMergeRequest: { [weak self] mr in
+                self?.notch.collapse()
+                NSWorkspace.shared.open(mr.url)
+            }
         ))
         demo = DemoRecorder(store: store, notch: notch)
         HookInstaller.updateIfNeeded()
@@ -90,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         setupStatusItem()
         updater.startAutomaticChecks()
+        gitlab.start()
         if OnboardingWindow.shouldShow(hooksInstalled: store.hooksInstalled) { showOnboarding() }
         refreshUsage()
         watchProcesses()
@@ -358,6 +365,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func openSettings() {
         settings.show(SettingsView(
             store: store,
+            gitlab: gitlab,
             onInstallHooks: { [weak self] in self?.installHooks() },
             onUninstallHooks: { [weak self] in self?.uninstallHooks() },
             onHotKeyChange: { [weak self] preset in self?.hotKey?.set(preset) },

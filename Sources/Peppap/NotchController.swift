@@ -2,14 +2,20 @@ import AppKit
 import SwiftUI
 
 enum NotchTab: Int, CaseIterable {
-    case sessions, today, week
+    case sessions, today, week, mergeRequests
 
     var title: String {
         switch self {
         case .sessions: return L("Sessions", "Сессии")
         case .today: return L("Today", "Сегодня")
         case .week: return L("Week", "Неделя")
+        case .mergeRequests: return "MR"
         }
+    }
+
+    /// Вкладка MR — только когда GitLab настроен.
+    static func visible(gitlab: Bool) -> [NotchTab] {
+        allCases.filter { $0 != .mergeRequests || gitlab }
     }
 }
 
@@ -21,6 +27,8 @@ final class NotchUIState: ObservableObject {
     @Published var tab: NotchTab = .sessions
     /// Выбранная с клавиатуры сессия.
     @Published var selectedID: String?
+    /// Выбранный с клавиатуры merge request.
+    @Published var selectedMR: String?
     /// Открыто горячей клавишей: не сворачивается при уходе курсора, принимает клавиатуру.
     @Published var pinned = false
     /// Фактический размер чёрной фигуры — по нему проверяем, находится ли курсор над раскрытой челкой.
@@ -44,6 +52,7 @@ final class NotchController {
 
     let ui = NotchUIState()
     private let store: SessionStore
+    private let gitlab: GitLabStore
     private let panel: NotchPanel
     private let actions: NotchActions
     private var mouseTimer: Timer?
@@ -54,8 +63,9 @@ final class NotchController {
     /// Сценарий демо управляет челкой сам — наведение мыши игнорируется.
     var scripted = false
 
-    init(store: SessionStore, updater: Updater, actions: NotchActions) {
+    init(store: SessionStore, gitlab: GitLabStore, updater: Updater, actions: NotchActions) {
         self.store = store
+        self.gitlab = gitlab
         self.actions = actions
         panel = NotchPanel(contentRect: NSRect(origin: .zero, size: Self.panelSize),
                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -70,7 +80,7 @@ final class NotchController {
         panel.ignoresMouseEvents = true
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
 
-        let root = NotchView(store: store, ui: ui, updater: updater, actions: actions)
+        let root = NotchView(store: store, gitlab: gitlab, ui: ui, updater: updater, actions: actions)
             .frame(width: Self.panelSize.width, height: Self.panelSize.height, alignment: .top)
         let host = FirstMouseHostingView(rootView: root)
         host.sizingOptions = []
@@ -213,6 +223,7 @@ final class NotchController {
         ui.isExpanded = false
         ui.pinned = false
         ui.selectedID = nil
+        ui.selectedMR = nil
         panel.ignoresMouseEvents = true
         wasInside = false
         // Клавиатуру возвращаем приложению, с которым работали, — но после анимации,
@@ -232,14 +243,16 @@ final class NotchController {
     // MARK: - Клавиатура
 
     private func handleKey(keyCode: UInt16, shift: Bool, chars: String?) -> Bool {
+        if keyCode != 53 && keyCode != 48 && ui.tab == .mergeRequests { return handleMergeRequestKey(keyCode: keyCode, chars: chars) }
         let sessions = store.visibleSessions
         let index = sessions.firstIndex { $0.id == ui.selectedID }
         switch keyCode {
         case 53: // Esc
             collapse()
         case 48: // Tab
-            let all = NotchTab.allCases
-            ui.tab = all[(ui.tab.rawValue + (shift ? all.count - 1 : 1)) % all.count]
+            let all = NotchTab.visible(gitlab: gitlab.isConfigured)
+            let i = all.firstIndex(of: ui.tab) ?? 0
+            ui.tab = all[(i + (shift ? all.count - 1 : 1)) % all.count]
         case 125: // ↓
             guard !sessions.isEmpty else { return true }
             ui.selectedID = sessions[min(sessions.count - 1, (index ?? -1) + 1)].id
@@ -257,6 +270,25 @@ final class NotchController {
             case "t", "е": store.answer(.terminal, sessionID: sessions[i].id)
             default: return false
             }
+        }
+        return true
+    }
+
+    private func handleMergeRequestKey(keyCode: UInt16, chars: String?) -> Bool {
+        let list = gitlab.snapshot?.all ?? []
+        let index = list.firstIndex { $0.id == ui.selectedMR }
+        switch keyCode {
+        case 125: // ↓
+            guard !list.isEmpty else { return true }
+            ui.selectedMR = list[min(list.count - 1, (index ?? -1) + 1)].id
+        case 126: // ↑
+            guard !list.isEmpty else { return true }
+            ui.selectedMR = list[max(0, (index ?? 1) - 1)].id
+        case 36, 76: // Return
+            if let i = index { actions.openMergeRequest(list[i]) }
+        default:
+            guard chars == "r" || chars == "к" else { return false }
+            gitlab.refresh()
         }
         return true
     }
