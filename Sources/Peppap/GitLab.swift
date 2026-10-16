@@ -43,6 +43,15 @@ struct MergeRequest: Identifiable, Equatable {
     let approvedBy: [String]
 
     var id: String { url.absoluteString }
+    /// Заголовок без «Draft:» / «WIP:» — черновик и так отмечен меткой.
+    var displayTitle: String {
+        guard draft else { return title }
+        var t = title
+        for prefix in ["Draft:", "[Draft]", "(Draft)", "WIP:", "[WIP]"] where t.lowercased().hasPrefix(prefix.lowercased()) {
+            t = String(t.dropFirst(prefix.count))
+        }
+        return t.trimmingCharacters(in: .whitespaces)
+    }
     var projectName: String { project.split(separator: "/").last.map(String.init) ?? project }
     var reference: String { "\(projectName)!\(iid)" }
 
@@ -89,6 +98,48 @@ enum GitLab {
         var review: [MergeRequest]
 
         var all: [MergeRequest] { authored + review }
+    }
+
+    /// Что изменилось между двумя обновлениями и стоит внимания.
+    struct Event: Equatable {
+        enum Kind: Int, Comparable {
+            // По возрастанию важности.
+            case readyToMerge, reviewRequested, pipelineFailed
+
+            static func < (a: Kind, b: Kind) -> Bool { a.rawValue < b.rawValue }
+
+            var tab: NotchTab { self == .reviewRequested ? .review : .mine }
+        }
+
+        let kind: Kind
+        let mr: MergeRequest
+
+        var title: String {
+            switch kind {
+            case .readyToMerge: return L("Ready to merge", "Можно вливать")
+            case .reviewRequested: return L("Review requested", "Просят ревью")
+            case .pipelineFailed: return L("Pipeline failed", "Пайплайн упал")
+            }
+        }
+    }
+
+    /// События по сравнению с прошлым списком. Новые свои MR событий не дают — их создали вы сами.
+    static func events(from old: Snapshot, to new: Snapshot) -> [Event] {
+        var events: [Event] = []
+        let seen = Set(old.all.map(\.id))
+        for mr in new.review where !seen.contains(mr.id) {
+            events.append(Event(kind: .reviewRequested, mr: mr))
+        }
+        let before = Dictionary(old.authored.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        for mr in new.authored {
+            guard let prev = before[mr.id] else { continue }
+            if mr.pipeline == .failed && prev.pipeline != .failed {
+                events.append(Event(kind: .pipelineFailed, mr: mr))
+            } else if mr.status == .ready && prev.status != .ready {
+                events.append(Event(kind: .readyToMerge, mr: mr))
+            }
+        }
+        return events
     }
 
     static let tokenAccount = "gitlab-token"
@@ -213,16 +264,20 @@ final class GitLabStore: ObservableObject {
     @Published private(set) var error: String?
     @Published private(set) var loading = false
     @Published private(set) var lastUpdate: Date?
-    /// Вкладка MR показывается, только если всё настроено.
+    /// Источник GitLab показывается, только если всё настроено.
     @Published private(set) var isConfigured = false
+    /// Непросмотренные события по id MR — для индикатора в свёрнутой челке и отметки в списке.
+    @Published private(set) var attention: [String: GitLab.Event.Kind] = [:]
+    /// События очередного обновления (уже отфильтрованные по настройкам).
+    var onEvents: (([GitLab.Event]) -> Void)?
 
     private(set) var token: String
     private var timer: Timer?
     private var generation = 0
 
-    init() {
-        token = Keychain.read(GitLab.tokenAccount) ?? ""
-        isConfigured = Self.configured(token: token)
+    init(token: String? = nil) {
+        self.token = token ?? Keychain.read(GitLab.tokenAccount) ?? ""
+        isConfigured = Self.configured(token: self.token)
     }
 
     private static func configured(token: String) -> Bool {
@@ -250,6 +305,7 @@ final class GitLabStore: ObservableObject {
         generation += 1
         snapshot = nil
         error = nil
+        attention = [:]
         lastUpdate = nil
         loading = false
         isConfigured = Self.configured(token: token)
@@ -273,21 +329,38 @@ final class GitLabStore: ObservableObject {
             lastUpdate = Date()
             switch result {
             case .success(let s):
-                snapshot = s
-                error = nil
+                apply(s)
             case .failure(let e):
                 error = e.localizedDescription
             }
         }
     }
 
+    /// Новый список: события относительно прошлого, без событий при первой загрузке.
+    func apply(_ s: GitLab.Snapshot) {
+        let events = snapshot.map { GitLab.events(from: $0, to: s) }?.filter { Prefs.gitlabNotifies($0.kind) } ?? []
+        snapshot = s
+        error = nil
+        let ids = Set(s.all.map(\.id))
+        attention = attention.filter { ids.contains($0.key) } // закрытые и влитые MR больше не важны
+        for e in events { attention[e.mr.id] = max(e.kind, attention[e.mr.id] ?? e.kind) }
+        if !events.isEmpty { onEvents?(events) }
+    }
+
+    func markSeen() {
+        if !attention.isEmpty { attention = [:] }
+    }
+
+    var hasAttention: Bool { !attention.isEmpty }
+    var attentionKind: GitLab.Event.Kind? { attention.values.max() }
+
     /// Короткая сводка для заголовка вкладки.
     var summary: String {
         guard let s = snapshot else { return loading ? L("loading…", "загрузка…") : "" }
-        var parts = [L("mine: \(s.authored.count)", "мои: \(s.authored.count)")]
-        if !s.review.isEmpty { parts.append(L("review: \(s.review.count)", "ревью: \(s.review.count)")) }
+        var parts = [L("mine \(s.authored.count)", "мои \(s.authored.count)"),
+                     L("review \(s.review.count)", "ревью \(s.review.count)")]
         let failed = s.authored.filter { $0.pipeline == .failed }.count
-        if failed > 0 { parts.append(L("failed: \(failed)", "упало: \(failed)")) }
+        if failed > 0 { parts.append("✗ \(failed)") }
         return parts.joined(separator: " · ")
     }
 }

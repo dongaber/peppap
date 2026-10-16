@@ -1,10 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// Окно первого запуска: язык, подключение hooks, разрешения, как пользоваться.
+/// Окно первого запуска: язык, подключение hooks и GitLab, разрешения, как пользоваться.
 struct OnboardingView: View {
     @ObservedObject var store: SessionStore
     let onInstallHooks: () -> Void
+    let onOpenSettings: () -> Void
     let onPlayDemo: () -> Void
     let onDone: () -> Void
 
@@ -16,7 +17,8 @@ struct OnboardingView: View {
                 Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 64, height: 64)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L("Welcome to Peppap", "Добро пожаловать в Peppap")).font(.title2.bold())
-                    Text(L("Claude Code session status right in your notch.", "Статус сессий Claude Code прямо в челке."))
+                    Text(L("Your dev status in the notch: Claude Code sessions and GitLab merge requests.",
+                           "Ваш рабочий статус в челке: сессии Claude Code и merge requests в GitLab."))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -39,17 +41,25 @@ struct OnboardingView: View {
                 }
             }
 
-            Step(number: 2, title: L("Permissions", "Разрешения"),
+            Step(number: 2, title: L("Connect GitLab (optional)", "Подключите GitLab (по желанию)"),
+                 text: L("See your open merge requests and review requests, with pipeline status and what blocks the merge. "
+                         + "You need the host of your GitLab and a token with the read_api scope.",
+                         "Ваши открытые merge requests и запросы на ревью, со статусом пайплайна и тем, что мешает влить. "
+                         + "Понадобятся адрес вашего GitLab и токен со scope read_api.")) {
+                Button(L("Set Up in Settings…", "Настроить…"), action: onOpenSettings)
+            }
+
+            Step(number: 3, title: L("Permissions", "Разрешения"),
                  text: L("macOS asks once to let Peppap control Terminal or iTerm2 — that is how it switches to the right tab "
                          + "and sends quick replies. No other permissions are needed.",
                          "macOS один раз спросит, можно ли Peppap управлять Terminal или iTerm2: так он переключается на нужную вкладку "
                          + "и отправляет быстрые ответы. Других разрешений не нужно.")) { EmptyView() }
 
-            Step(number: 3, title: L("Use it", "Пользуйтесь"),
-                 text: L("Hover over the notch to see your sessions, or press \(Prefs.hotkey.title). "
-                         + "The notch expands by itself when Claude finishes or needs your permission.",
-                         "Наведите курсор на челку, чтобы увидеть сессии, или нажмите \(Prefs.hotkey.title). "
-                         + "Челка раскроется сама, когда Claude закончит или попросит разрешения.")) {
+            Step(number: 4, title: L("Use it", "Пользуйтесь"),
+                 text: L("Hover over the notch or press \(Prefs.hotkey.title). "
+                         + "The notch expands by itself when Claude finishes or needs your permission, and when something happens to your merge requests.",
+                         "Наведите курсор на челку или нажмите \(Prefs.hotkey.title). "
+                         + "Челка раскроется сама, когда Claude закончит или попросит разрешения, и когда что-то случится с вашими merge requests.")) {
                 Button(L("Play demo", "Показать демо"), action: onPlayDemo)
             }
 

@@ -400,6 +400,10 @@ enum Fmt {
         "\(n) " + plural(n, en: ("file", "files"), ru: ("файл", "файла", "файлов"))
     }
 
+    static func sessions(_ n: Int) -> String {
+        "\(n) " + plural(n, en: ("session", "sessions"), ru: ("сессия", "сессии", "сессий"))
+    }
+
     static func tasks(_ n: Int) -> String {
         "\(n) " + plural(n, en: ("task", "tasks"), ru: ("задача", "задачи", "задач"))
     }

@@ -5,6 +5,19 @@ and versions follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- GitLab notifications: a new review request, a failed pipeline in your MR, or your MR becoming ready to merge plays a sound and briefly expands the notch (each can be turned off in Settings → GitLab).
+- While Claude is idle, the collapsed notch shows a merge icon with the number of unseen GitLab events; opening the notch goes straight to them.
+- Optional “Connect GitLab” step in the welcome window.
+
+### Changed
+- The expanded notch is organized by source: Claude · GitLab next to the notch, the source's tabs (Sessions / Today / Week, Mine / Review) below it. ←→ switch the source, Tab switches tabs.
+- Settings and the ✦ menu are grouped by source; Claude Code hooks moved to their own section.
+- Draft merge requests show their title without the “Draft:” prefix.
+
+### Fixed
+- Tabs no longer slide under the hardware notch.
+
 ## [0.4.1] — 2026-10-16
 
 ### Added

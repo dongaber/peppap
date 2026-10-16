@@ -30,6 +30,10 @@ struct SettingsView: View {
     @AppStorage(Prefs.Key.gitlabEnabled) private var gitlabEnabled = true
     @AppStorage(Prefs.Key.gitlabHost) private var gitlabHost = ""
     @AppStorage(Prefs.Key.gitlabInterval) private var gitlabInterval = 120.0
+    @AppStorage(Prefs.Key.gitlabNotifyReview) private var gitlabNotifyReview = true
+    @AppStorage(Prefs.Key.gitlabNotifyFailed) private var gitlabNotifyFailed = true
+    @AppStorage(Prefs.Key.gitlabNotifyReady) private var gitlabNotifyReady = true
+    @AppStorage(Prefs.Key.gitlabSound) private var gitlabSound = "Ping"
     @State private var gitlabToken = ""
     @AppStorage(Updater.checkKey) private var checkUpdates = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -42,39 +46,22 @@ struct SettingsView: View {
                 }
             }
 
-            Section(L("Notifications", "Уведомления")) {
-                Toggle(L("Sound", "Звук"), isOn: $sound)
-                Picker(L("Task done", "Задача готова"), selection: $soundDone) { soundOptions }
-                    .disabled(!sound)
-                Picker(L("Needs permission", "Нужно разрешение"), selection: $soundPermission) { soundOptions }
-                    .disabled(!sound)
-                Picker(L("Play the done sound if the task took", "Звук о готовности, если задача длилась"), selection: $soundMinSeconds) {
-                    Text(L("any time", "любое время")).tag(0.0)
-                    Text(L("over 10 s", "дольше 10 с")).tag(10.0)
-                    Text(L("over 30 s", "дольше 30 с")).tag(30.0)
-                    Text(L("over 1 min", "дольше 1 мин")).tag(60.0)
-                    Text(L("over 2 min", "дольше 2 мин")).tag(120.0)
-                }
-                .disabled(!sound)
-                Toggle(L("Trackpad haptics when a task is done", "Отклик трекпада, когда задача готова"), isOn: $haptics)
-                Toggle(L("Expand the notch on events", "Раскрывать челку при событиях"), isOn: $autoExpand)
-                LabeledContent(L("Show for", "Показывать")) {
-                    HStack {
-                        Slider(value: $peekSeconds, in: 2...10, step: 1)
-                        Text("\(Int(peekSeconds)) " + L("s", "с")).monospacedDigit().frame(width: 36, alignment: .trailing)
+            Section {
+                LabeledContent("Hooks") {
+                    if store.hooksInstalled {
+                        HStack {
+                            Label(L("connected", "подключены"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                            Button(L("Disconnect", "Отключить"), action: onUninstallHooks)
+                        }
+                    } else {
+                        Button(L("Connect", "Подключить"), action: onInstallHooks)
                     }
                 }
-                .disabled(!autoExpand)
-            }
-
-            Section {
-                Toggle(L("During calls (microphone in use)", "Во время созвона (занят микрофон)"), isOn: $quietInCalls)
-                Toggle(L("In full-screen apps", "В полноэкранном режиме"), isOn: $quietInFullscreen)
             } header: {
-                Text(L("Do not disturb", "Не беспокоить"))
+                Text("Claude Code")
             } footer: {
-                Text(L("No sound and no auto-expanding. The notch status keeps updating.",
-                       "Без звука и без автоматического раскрытия. Статус в челке продолжает обновляться."))
+                Text(L("Session status, permission requests and usage come from Claude Code hooks and its status line.",
+                       "Статус сессий, запросы разрешений и расход приходят из hooks Claude Code и его строки состояния."))
                     .foregroundStyle(.secondary)
             }
 
@@ -111,6 +98,42 @@ struct SettingsView: View {
 
             gitlabSection
 
+            Section(L("Notifications", "Уведомления")) {
+                Toggle(L("Sound", "Звук"), isOn: $sound)
+                Picker(L("Claude: task done", "Claude: задача готова"), selection: $soundDone) { soundOptions }
+                    .disabled(!sound)
+                Picker(L("Claude: needs permission", "Claude: нужно разрешение"), selection: $soundPermission) { soundOptions }
+                    .disabled(!sound)
+                Picker(L("Play the done sound if the task took", "Звук о готовности, если задача длилась"), selection: $soundMinSeconds) {
+                    Text(L("any time", "любое время")).tag(0.0)
+                    Text(L("over 10 s", "дольше 10 с")).tag(10.0)
+                    Text(L("over 30 s", "дольше 30 с")).tag(30.0)
+                    Text(L("over 1 min", "дольше 1 мин")).tag(60.0)
+                    Text(L("over 2 min", "дольше 2 мин")).tag(120.0)
+                }
+                .disabled(!sound)
+                Toggle(L("Trackpad haptics when a task is done", "Отклик трекпада, когда задача готова"), isOn: $haptics)
+                Toggle(L("Expand the notch on events", "Раскрывать челку при событиях"), isOn: $autoExpand)
+                LabeledContent(L("Show for", "Показывать")) {
+                    HStack {
+                        Slider(value: $peekSeconds, in: 2...10, step: 1)
+                        Text("\(Int(peekSeconds)) " + L("s", "с")).monospacedDigit().frame(width: 36, alignment: .trailing)
+                    }
+                }
+                .disabled(!autoExpand)
+            }
+
+            Section {
+                Toggle(L("During calls (microphone in use)", "Во время созвона (занят микрофон)"), isOn: $quietInCalls)
+                Toggle(L("In full-screen apps", "В полноэкранном режиме"), isOn: $quietInFullscreen)
+            } header: {
+                Text(L("Do not disturb", "Не беспокоить"))
+            } footer: {
+                Text(L("No sound and no auto-expanding. The notch status keeps updating.",
+                       "Без звука и без автоматического раскрытия. Статус в челке продолжает обновляться."))
+                    .foregroundStyle(.secondary)
+            }
+
             Section(L("Notch", "Челка")) {
                 Picker(L("Hotkey", "Горячая клавиша"), selection: $hotkey) {
                     ForEach(HotKeyPreset.allCases) { Text($0.title).tag($0.rawValue) }
@@ -145,16 +168,6 @@ struct SettingsView: View {
                             launchAtLogin = SMAppService.mainApp.status == .enabled
                         }
                     }
-                LabeledContent(L("Claude Code hooks", "Hooks Claude Code")) {
-                    if store.hooksInstalled {
-                        HStack {
-                            Label(L("connected", "подключены"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                            Button(L("Disconnect", "Отключить"), action: onUninstallHooks)
-                        }
-                    } else {
-                        Button(L("Connect", "Подключить"), action: onInstallHooks)
-                    }
-                }
             }
         }
         .formStyle(.grouped) // прокручивается сам, если не помещается
@@ -199,13 +212,24 @@ struct SettingsView: View {
                             .disabled(!gitlab.isConfigured || gitlab.loading)
                     }
                 }
+                LabeledContent(L("Notify when", "Уведомлять, когда")) {
+                    VStack(alignment: .leading) {
+                        Toggle(L("someone requests my review", "меня зовут на ревью"), isOn: $gitlabNotifyReview)
+                        Toggle(L("a pipeline fails in my MR", "в моём MR упал пайплайн"), isOn: $gitlabNotifyFailed)
+                        Toggle(L("my MR is ready to merge", "мой MR можно вливать"), isOn: $gitlabNotifyReady)
+                    }
+                }
+                Picker(L("Sound", "Звук"), selection: $gitlabSound) { soundOptions }
+                    .disabled(!sound)
             }
             .disabled(!gitlabEnabled)
         } header: {
             Text("GitLab")
         } footer: {
-            Text(L("A personal access token with the read_api scope. It is stored in the Keychain.",
-                   "Personal access token со scope read_api. Хранится в связке ключей."))
+            Text(L("A personal access token with the read_api scope; it is stored in the Keychain. "
+                   + "Notifications follow the Notifications and Do not disturb settings.",
+                   "Personal access token со scope read_api, хранится в связке ключей. "
+                   + "Уведомления подчиняются разделам «Уведомления» и «Не беспокоить»."))
                 .foregroundStyle(.secondary)
         }
         .onAppear { gitlabToken = gitlab.token }

@@ -1,21 +1,52 @@
 import AppKit
+import Combine
 import SwiftUI
 
+/// Откуда данные: переключатель в левом крыле раскрытой челки.
+enum NotchSource: Int, CaseIterable {
+    case claude, gitlab
+
+    var title: String {
+        switch self {
+        case .claude: return "Claude"
+        case .gitlab: return "GitLab"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .claude: return "asterisk"
+        case .gitlab: return "arrow.triangle.merge"
+        }
+    }
+
+    var tabs: [NotchTab] { NotchTab.allCases.filter { $0.source == self } }
+
+    /// GitLab — только когда он настроен.
+    static func visible(gitlab: Bool) -> [NotchSource] {
+        gitlab ? allCases : [.claude]
+    }
+}
+
+/// Подвкладки источников: строка под челкой.
 enum NotchTab: Int, CaseIterable {
-    case sessions, today, week, mergeRequests
+    case sessions, today, week, mine, review
+
+    var source: NotchSource {
+        switch self {
+        case .sessions, .today, .week: return .claude
+        case .mine, .review: return .gitlab
+        }
+    }
 
     var title: String {
         switch self {
         case .sessions: return L("Sessions", "Сессии")
         case .today: return L("Today", "Сегодня")
         case .week: return L("Week", "Неделя")
-        case .mergeRequests: return "MR"
+        case .mine: return L("Mine", "Мои")
+        case .review: return L("Review", "Ревью")
         }
-    }
-
-    /// Вкладка MR — только когда GitLab настроен.
-    static func visible(gitlab: Bool) -> [NotchTab] {
-        allCases.filter { $0 != .mergeRequests || gitlab }
     }
 }
 
@@ -24,7 +55,11 @@ final class NotchUIState: ObservableObject {
     @Published var isExpanded = false
     @Published var notchWidth: CGFloat = 185
     @Published var notchHeight: CGFloat = 32
-    @Published var tab: NotchTab = .sessions
+    @Published var tab: NotchTab = .sessions {
+        didSet { lastTab[tab.source] = tab }
+    }
+    /// Последняя открытая подвкладка каждого источника.
+    private var lastTab: [NotchSource: NotchTab] = [:]
     /// Выбранная с клавиатуры сессия.
     @Published var selectedID: String?
     /// Выбранный с клавиатуры merge request.
@@ -33,6 +68,11 @@ final class NotchUIState: ObservableObject {
     @Published var pinned = false
     /// Фактический размер чёрной фигуры — по нему проверяем, находится ли курсор над раскрытой челкой.
     var shapeSize: CGSize = .zero
+
+    func select(_ source: NotchSource) {
+        guard source != tab.source else { return }
+        tab = lastTab[source] ?? source.tabs[0]
+    }
 }
 
 private final class NotchPanel: NSPanel {
@@ -60,6 +100,9 @@ final class NotchController {
     private var wasInside = false
     private var collapseWork: DispatchWorkItem?
     private var peeking = false
+    /// Пользователь сам смотрел GitLab — при закрытии события считаются просмотренными.
+    private var viewedGitLab = false
+    private var watchers: Set<AnyCancellable> = []
     /// Сценарий демо управляет челкой сам — наведение мыши игнорируется.
     var scripted = false
 
@@ -105,6 +148,16 @@ final class NotchController {
         RunLoop.main.add(timer, forMode: .common)
         mouseTimer = timer
 
+        // Peek не считается просмотром: его могли и не заметить.
+        ui.$tab.combineLatest(ui.$isExpanded)
+            .sink { [weak self] tab, expanded in
+                MainActor.assumeIsolated {
+                    guard let self, expanded, !self.peeking, tab.source == .gitlab else { return }
+                    self.viewedGitLab = true
+                }
+            }
+            .store(in: &watchers)
+
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             let keyCode = event.keyCode
             let shift = event.modifierFlags.contains(.shift)
@@ -148,7 +201,7 @@ final class NotchController {
                 .insetBy(dx: -8, dy: -8)
         }
         let pad = CGFloat(Prefs.hoverPadding)
-        let width = ui.notchWidth + (store.hasActivity ? 2 * (CollapsedView.wing + 6) : 0)
+        let width = ui.notchWidth + (store.hasActivity || gitlab.hasAttention ? 2 * (CollapsedView.wing + 6) : 0)
         return NSRect(x: f.midX - width / 2 - pad, y: f.maxY - ui.notchHeight - pad * 0.8,
                       width: width + 2 * pad, height: ui.notchHeight + pad * 0.8)
     }
@@ -164,7 +217,7 @@ final class NotchController {
             panel.ignoresMouseEvents = false
             // Клавиатуру панель берёт только по клику в поле ввода (becomesKeyOnlyIfNeeded).
             panel.allowsKey = true
-            if !ui.isExpanded { ui.tab = .sessions }
+            if !ui.isExpanded { ui.tab = openingTab() }
             ui.isExpanded = true
         } else {
             panel.ignoresMouseEvents = true
@@ -172,11 +225,26 @@ final class NotchController {
         }
     }
 
-    /// Ненадолго раскрыть челку (событие в сессии).
-    func peek(for seconds: TimeInterval) {
+    /// Что открыть: GitLab, если индикатор в свёрнутой челке показывает его, иначе сессии.
+    private func openingTab() -> NotchTab {
+        guard !store.hasActivity, let kind = gitlab.attentionKind else { return .sessions }
+        selectAttentionMR()
+        return kind.tab
+    }
+
+    private func selectAttentionMR() {
+        let list = (ui.tab == .review ? gitlab.snapshot?.review : gitlab.snapshot?.authored) ?? []
+        ui.selectedMR = list.first { gitlab.attention[$0.id] == gitlab.attentionKind }?.id
+    }
+
+    /// Ненадолго раскрыть челку (событие в сессии или в GitLab).
+    func peek(for seconds: TimeInterval, tab: NotchTab = .sessions, mergeRequest: String? = nil) {
         guard !ui.isExpanded || peeking else { return }
+        // Не уводить с запроса разрешения, который показывает челка.
+        if tab.source != .claude && peeking && store.topPhase == .permission { return }
         peeking = true
-        ui.tab = .sessions
+        ui.tab = tab
+        if let mergeRequest { ui.selectedMR = mergeRequest }
         ui.isExpanded = true
         scheduleCollapse(after: seconds)
     }
@@ -189,7 +257,7 @@ final class NotchController {
         }
         collapseWork?.cancel()
         peeking = false
-        ui.tab = .sessions
+        ui.tab = openingTab()
         ui.pinned = true
         ui.selectedID = store.visibleSessions.first?.id
         ui.isExpanded = true
@@ -220,6 +288,10 @@ final class NotchController {
     func collapse() {
         collapseWork?.cancel()
         peeking = false
+        if viewedGitLab {
+            viewedGitLab = false
+            gitlab.markSeen()
+        }
         ui.isExpanded = false
         ui.pinned = false
         ui.selectedID = nil
@@ -243,16 +315,28 @@ final class NotchController {
     // MARK: - Клавиатура
 
     private func handleKey(keyCode: UInt16, shift: Bool, chars: String?) -> Bool {
-        if keyCode != 53 && keyCode != 48 && ui.tab == .mergeRequests { return handleMergeRequestKey(keyCode: keyCode, chars: chars) }
-        let sessions = store.visibleSessions
-        let index = sessions.firstIndex { $0.id == ui.selectedID }
         switch keyCode {
         case 53: // Esc
             collapse()
-        case 48: // Tab
-            let all = NotchTab.visible(gitlab: gitlab.isConfigured)
-            let i = all.firstIndex(of: ui.tab) ?? 0
-            ui.tab = all[(i + (shift ? all.count - 1 : 1)) % all.count]
+            return true
+        case 48: // Tab — подвкладки текущего источника
+            let tabs = ui.tab.source.tabs
+            let i = tabs.firstIndex(of: ui.tab) ?? 0
+            ui.tab = tabs[(i + (shift ? tabs.count - 1 : 1)) % tabs.count]
+            return true
+        case 123, 124: // ← → — источники; в поле ввода стрелки двигают курсор
+            if panel.firstResponder is NSTextView { return false }
+            let sources = NotchSource.visible(gitlab: gitlab.isConfigured)
+            let i = sources.firstIndex(of: ui.tab.source) ?? 0
+            ui.select(sources[(i + (keyCode == 123 ? sources.count - 1 : 1)) % sources.count])
+            return true
+        default:
+            break
+        }
+        if ui.tab.source == .gitlab { return handleMergeRequestKey(keyCode: keyCode, chars: chars) }
+        let sessions = store.visibleSessions
+        let index = sessions.firstIndex { $0.id == ui.selectedID }
+        switch keyCode {
         case 125: // ↓
             guard !sessions.isEmpty else { return true }
             ui.selectedID = sessions[min(sessions.count - 1, (index ?? -1) + 1)].id

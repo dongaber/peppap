@@ -17,6 +17,8 @@ enum PeppapTests {
             ("L10n", l10nTests),
             ("Updater", updaterTests),
             ("GitLab", gitlabTests),
+            ("GitLab events", gitlabEventTests),
+            ("Navigation", navigationTests),
         ])
     }
 }
@@ -446,5 +448,67 @@ let gitlabTests: [(String, @MainActor () throws -> Void)] = [
         expectEqual(try mergeRequest(["draft": true, "detailedMergeStatus": "DRAFT_STATUS"]).status, .draft)
         expectEqual(try mergeRequest(["headPipeline": NSNull(), "detailedMergeStatus": "CHECKING"]).status, .checking)
         expectEqual(try mergeRequest(["headPipeline": NSNull()]).pipeline, nil)
+        expectEqual(try mergeRequest(["draft": true, "title": "Draft: New flow"]).displayTitle, "New flow")
+        expectEqual(try mergeRequest(["title": "WIP: not a draft"]).displayTitle, "WIP: not a draft")
+    }),
+]
+
+private func snapshot(authored: [[String: Any]], review: [[String: Any]] = []) throws -> GitLab.Snapshot {
+    let json: [String: Any] = ["data": ["currentUser": ["username": "me", "authored": ["nodes": authored], "review": ["nodes": review]]]]
+    return try GitLab.parse(JSONSerialization.data(withJSONObject: json))
+}
+
+let gitlabEventTests: [(String, @MainActor () throws -> Void)] = [
+    ("ревью, упавший пайплайн, можно вливать", {
+        let old = try snapshot(authored: [mrNode("1", extra: ["detailedMergeStatus": "CI_STILL_RUNNING", "headPipeline": ["status": "RUNNING"]]),
+                                          mrNode("2", extra: ["detailedMergeStatus": "NOT_APPROVED"])],
+                               review: [mrNode("5", project: "team/other")])
+        let new = try snapshot(authored: [mrNode("1", extra: ["detailedMergeStatus": "CI_MUST_PASS", "headPipeline": ["status": "FAILED"]]),
+                                          mrNode("2"),
+                                          mrNode("3")], // новый свой MR — без события
+                               review: [mrNode("5", project: "team/other"), mrNode("6", project: "team/other")])
+        let events = GitLab.events(from: old, to: new)
+        expectEqual(events.map(\.kind), [.reviewRequested, .pipelineFailed, .readyToMerge])
+        expectEqual(events.map(\.mr.iid), ["6", "1", "2"])
+        expectEqual(events[0].kind.tab, .review)
+        expectEqual(events[1].kind.tab, .mine)
+    }),
+    ("без изменений — без событий", {
+        let s = try snapshot(authored: [mrNode("1", extra: ["headPipeline": ["status": "FAILED"]])], review: [mrNode("2", project: "x/y")])
+        expect(GitLab.events(from: s, to: s).isEmpty)
+    }),
+    ("индикатор: первая загрузка тихая, закрытые MR пропадают", {
+        let store = GitLabStore(token: "") // без обращения к связке ключей
+        var received: [GitLab.Event] = []
+        store.onEvents = { received += $0 }
+        store.apply(try snapshot(authored: [mrNode("1", extra: ["detailedMergeStatus": "NOT_APPROVED"])]))
+        expect(received.isEmpty)
+        expect(!store.hasAttention)
+        store.apply(try snapshot(authored: [mrNode("1")], review: [mrNode("9", project: "a/b")]))
+        expectEqual(received.count, 2)
+        expectEqual(store.attentionKind, .reviewRequested)
+        store.apply(try snapshot(authored: [mrNode("1")]))
+        expectEqual(Array(store.attention.values), [.readyToMerge])
+        store.markSeen()
+        expect(!store.hasAttention)
+    }),
+]
+
+let navigationTests: [(String, @MainActor () throws -> Void)] = [
+    ("источники и подвкладки", {
+        expectEqual(NotchSource.claude.tabs, [.sessions, .today, .week])
+        expectEqual(NotchSource.gitlab.tabs, [.mine, .review])
+        expectEqual(NotchSource.visible(gitlab: false), [.claude])
+    }),
+    ("источник помнит свою подвкладку", {
+        let ui = NotchUIState()
+        ui.tab = .week
+        ui.select(.gitlab)
+        expectEqual(ui.tab, .mine)
+        ui.tab = .review
+        ui.select(.claude)
+        expectEqual(ui.tab, .week)
+        ui.select(.gitlab)
+        expectEqual(ui.tab, .review)
     }),
 ]

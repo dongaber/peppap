@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         HookInstaller.updateIfNeeded()
         store.hooksInstalled = HookInstaller.isInstalled
         store.onAttention = { [weak self] s in self?.attention(s) }
+        gitlab.onEvents = { [weak self] events in self?.attention(events) }
 
         let server = EventServer(
             onEvent: { [weak self] event in self?.store.handle(event) },
@@ -129,6 +130,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if Prefs.autoExpand && !quiet {
             notch.peek(for: s.phase == .permission ? max(8, Prefs.peekSeconds) : Prefs.peekSeconds)
+        }
+    }
+
+    /// События GitLab за одно обновление: один звук и одно раскрытие — на самом важном.
+    private func attention(_ events: [GitLab.Event]) {
+        guard !store.demoActive, let top = events.max(by: { $0.kind < $1.kind }) else { return }
+        let quiet = Quiet.isQuiet
+        if Prefs.sound && !quiet { NSSound(named: Prefs.gitlabSound)?.play() }
+        // Пока Claude работает или ждёт ответа, челку занимают сессии; событие останется в индикаторе.
+        let busy = store.topPhase == .working || store.topPhase == .permission
+        if Prefs.autoExpand && !quiet && !busy {
+            notch.peek(for: Prefs.peekSeconds, tab: top.kind.tab, mergeRequest: top.mr.id)
         }
     }
 
@@ -258,8 +271,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             add(menu, L("Update to \(release.version)…", "Обновить до \(release.version)…"), #selector(menuUpdate))
         }
         let n = store.sessions.count
-        menu.addItem(withTitle: n == 0 ? L("No active sessions", "Нет активных сессий") : L("Claude Code sessions: ", "Сессий Claude Code: ") + "\(n)",
-                     action: nil, keyEquivalent: "")
+        menu.addItem(withTitle: "Claude Code: " + (n == 0 ? L("no sessions", "нет сессий") : Fmt.sessions(n)), action: nil, keyEquivalent: "")
+        if gitlab.isConfigured {
+            let s = gitlab.snapshot
+            menu.addItem(withTitle: "GitLab: " + (s.map { L("\($0.authored.count) MR · \($0.review.count) to review", "\($0.authored.count) MR · \($0.review.count) на ревью") }
+                                                  ?? gitlab.error ?? L("loading…", "загрузка…")),
+                         action: nil, keyEquivalent: "")
+        }
         if Prefs.hotkey != .off {
             add(menu, L("Open the notch", "Открыть челку") + " (\(Prefs.hotkey.title))", #selector(menuOpenNotch))
         }
@@ -357,6 +375,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         onboarding.show(OnboardingView(
             store: store,
             onInstallHooks: { [weak self] in self?.installHooks(quiet: true) },
+            onOpenSettings: { [weak self] in self?.openSettings() },
             onPlayDemo: { [weak self] in self?.startDemo(record: false) },
             onDone: { [weak self] in self?.onboarding.close() }
         ))

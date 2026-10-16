@@ -1,6 +1,6 @@
 # Peppap
 
-Claude Code session status right in your MacBook notch.
+Your dev status in the MacBook notch: Claude Code sessions, GitLab merge requests and more.
 
 ![Peppap: Claude Code sessions in the notch](docs/demo.gif)
 
@@ -15,6 +15,10 @@ Claude Code session status right in your MacBook notch.
 
 ## Features
 
+The expanded notch has a source switch next to the notch (Claude · GitLab) and the source's tabs below it.
+
+### Claude Code
+
 - **Status in the notch.** While Claude works, a ✻ spinner turns next to the notch, a ring shows progress through Claude's plan, and a timer counts the current task.
 - **Answer permission requests from the notch:** Allow, Always allow, Deny, or hand the request back to the terminal. If the session's terminal is already in front, the request goes straight there. If you don't answer, it returns to the terminal after a configurable timeout.
 - **Change preview** (Edit / MultiEdit / Write) right in the permission card.
@@ -25,11 +29,19 @@ Claude Code session status right in your MacBook notch.
 - **Week tab:** a 7-day chart by cost, time or number of tasks, plus a Markdown export of the weekly report.
 - **Quick replies:** "Continue", "Run the tests" or your own message. Works with Terminal and iTerm2.
 - **Jump to a session:** the right Terminal or iTerm2 tab (matched by tty), the project window in VS Code, Cursor, Windsurf or Zed, or just the terminal app.
-- **Hotkey** (⌃⌥C by default) opens the notch with keyboard control: ↑↓ select, ⏎ jump, Tab switch tabs, A/S/D/T answer a permission request, Esc close.
-- **Notifications:** sound, trackpad haptics and auto-expanding notch. Sound can be limited to long tasks. Peppap stays quiet during calls (microphone in use) and in full-screen apps.
 - **Resilience:** closed terminals disappear from the list, Esc interrupts are detected from the transcript, and live sessions are restored after Peppap restarts.
-- **GitLab merge requests tab:** your open MRs and the ones waiting for your review, with pipeline status, approvals, comments and what blocks the merge. Works with self-hosted GitLab (CE or EE, GraphQL API).
 - **Right-click a session** to pin it, rename it, or hide it until its next activity.
+
+### GitLab
+
+- **Mine and Review tabs:** your open merge requests and the ones waiting for your review, with pipeline status, approvals, comments and what blocks the merge.
+- **Notifications** when someone requests your review, a pipeline fails in your MR, or your MR becomes ready to merge. While Claude is idle, the collapsed notch shows a merge icon with the number of new events.
+- Works with self-hosted GitLab (CE or EE, GraphQL API) and a `read_api` token kept in the Keychain.
+
+### Everywhere
+
+- **Hotkey** (⌃⌥C by default) opens the notch with keyboard control: ←→ switch source, Tab switch tabs, ↑↓ select, ⏎ open, A/S/D/T answer a permission request, R refresh merge requests, Esc close.
+- **Notifications:** sound, trackpad haptics and auto-expanding notch. Sound can be limited to long tasks. Peppap stays quiet during calls (microphone in use) and in full-screen apps.
 - **English and Russian interface**, following the system language or switched in Settings without a restart.
 - **Settings window** (✦ menu → Settings…).
 
@@ -70,7 +82,7 @@ The ✦ menu also has: sound toggle, settings, weekly report export, demo, demo 
 
 1. Create a personal access token with the `read_api` scope (Settings → GitLab → **Create…** opens the right page).
 2. Enter your GitLab host (e.g. `https://gitlab.example.com`) and the token in Settings → GitLab. The token is stored in the Keychain.
-3. The **MR** tab appears in the notch. It refreshes every 2 minutes (configurable) and when you open it; press R to refresh, ⏎ or click to open an MR.
+3. **GitLab** appears next to **Claude** in the expanded notch. The lists refresh every 2 minutes (configurable) and when you open them; press R to refresh, ⏎ or click to open an MR. Choose which events notify you in the same Settings section.
 
 ## Building from source
 

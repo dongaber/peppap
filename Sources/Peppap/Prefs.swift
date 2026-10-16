@@ -22,6 +22,10 @@ enum Prefs {
         static let gitlabEnabled = "gitlabEnabled"
         static let gitlabHost = "gitlabHost"
         static let gitlabInterval = "gitlabInterval"
+        static let gitlabNotifyReview = "gitlabNotifyReview"
+        static let gitlabNotifyFailed = "gitlabNotifyFailed"
+        static let gitlabNotifyReady = "gitlabNotifyReady"
+        static let gitlabSound = "gitlabSound"
         static let language = L10n.key
     }
 
@@ -46,6 +50,10 @@ enum Prefs {
             Key.haptics: true,
             Key.gitlabEnabled: true,
             Key.gitlabInterval: 120.0,
+            Key.gitlabNotifyReview: true,
+            Key.gitlabNotifyFailed: true,
+            Key.gitlabNotifyReady: true,
+            Key.gitlabSound: "Ping",
         ])
     }
 
@@ -76,5 +84,13 @@ enum Prefs {
     static var gitlabEnabled: Bool { d.bool(forKey: Key.gitlabEnabled) }
     static var gitlabHostURL: URL? { GitLab.normalizedHost(d.string(forKey: Key.gitlabHost) ?? "") }
     static var gitlabInterval: Double { d.double(forKey: Key.gitlabInterval) }
+    static var gitlabSound: String { d.string(forKey: Key.gitlabSound) ?? "Ping" }
+    static func gitlabNotifies(_ kind: GitLab.Event.Kind) -> Bool {
+        switch kind {
+        case .reviewRequested: return d.bool(forKey: Key.gitlabNotifyReview)
+        case .pipelineFailed: return d.bool(forKey: Key.gitlabNotifyFailed)
+        case .readyToMerge: return d.bool(forKey: Key.gitlabNotifyReady)
+        }
+    }
     static var hotkey: HotKeyPreset { HotKeyPreset(rawValue: d.string(forKey: Key.hotkey) ?? "") ?? .ctrlOptC }
 }

@@ -53,7 +53,8 @@ struct NotchView: View {
     /// Смена языка пересобирает интерфейс целиком.
     @AppStorage(Prefs.Key.language) private var language = AppLanguage.system.rawValue
 
-    private var ear: CGFloat { ui.isExpanded ? 12 : (store.hasActivity ? 6 : 0) }
+    private var hasActivity: Bool { store.hasActivity || gitlab.hasAttention }
+    private var ear: CGFloat { ui.isExpanded ? 12 : (hasActivity ? 6 : 0) }
 
     var body: some View {
         content
@@ -67,21 +68,21 @@ struct NotchView: View {
             })
             .animation(ui.isExpanded ? .spring(response: 0.42, dampingFraction: 0.78) : .spring(response: 0.34, dampingFraction: 0.92),
                        value: ui.isExpanded)
-            .animation(.easeInOut(duration: 0.25), value: store.hasActivity)
+            .animation(.easeInOut(duration: 0.25), value: hasActivity)
             .environment(\.colorScheme, .dark)
     }
 
     @ViewBuilder private var content: some View {
         if ui.isExpanded {
             ExpandedView(store: store, gitlab: gitlab, ui: ui, updater: updater, actions: actions)
-                .frame(width: max(540, ui.notchWidth + 330))
+                .frame(width: ExpandedView.width(notch: ui.notchWidth))
                 // Фигура растягивается пружиной, содержимое проявляется чуть позже и быстро гаснет при закрытии.
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .offset(y: -6)).animation(.easeOut(duration: 0.22).delay(0.07)),
                     removal: .opacity.animation(.easeIn(duration: 0.1))
                 ))
         } else {
-            CollapsedView(store: store, ui: ui)
+            CollapsedView(store: store, gitlab: gitlab, ui: ui)
                 .transition(.asymmetric(
                     insertion: .opacity.animation(.easeOut(duration: 0.18).delay(0.12)),
                     removal: .opacity.animation(.easeIn(duration: 0.08))
@@ -94,11 +95,13 @@ struct NotchView: View {
 
 struct CollapsedView: View {
     @ObservedObject var store: SessionStore
+    @ObservedObject var gitlab: GitLabStore
     @ObservedObject var ui: NotchUIState
     static let wing: CGFloat = 46
 
     var body: some View {
         HStack(spacing: 0) {
+            // Claude важнее: события GitLab видны, только пока сессии ничего не делают.
             if store.hasActivity {
                 ZStack {
                     if let progress = store.topTodoProgress {
@@ -107,10 +110,20 @@ struct CollapsedView: View {
                     PhaseIcon(phase: store.topPhase, size: 14)
                 }
                 .frame(width: Self.wing)
+            } else if let kind = gitlab.attentionKind {
+                Image(systemName: NotchSource.gitlab.symbol)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(kind.color)
+                    .frame(width: Self.wing)
             }
             Color.clear.frame(width: ui.notchWidth)
             if store.hasActivity {
                 trailing.frame(width: Self.wing)
+            } else if gitlab.hasAttention {
+                Text("\(gitlab.attention.count)")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Ink.primary)
+                    .frame(width: Self.wing)
             }
         }
         .frame(height: ui.notchHeight)
@@ -169,38 +182,74 @@ private struct ExpandedView: View {
     @ObservedObject var updater: Updater
     let actions: NotchActions
 
+    static func width(notch: CGFloat) -> CGFloat { max(540, notch + 330) }
+    private static let padding: CGFloat = 14
+
+    /// Ширина «крыла» слева и справа от аппаратной челки: содержимое верхней строки не заходит под неё.
+    private var wing: CGFloat { (Self.width(notch: ui.notchWidth) - 2 * Self.padding - ui.notchWidth - 12) / 2 }
+
+    /// Вкладка выключенного источника (GitLab без настроек) не показывается.
+    private var tab: NotchTab { ui.tab.source == .gitlab && !gitlab.isConfigured ? .sessions : ui.tab }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Верхняя полоса по бокам от аппаратной челки.
+            // Верхняя полоса по бокам от аппаратной челки: источники слева, сводка справа.
             HStack(spacing: 0) {
-                HStack(spacing: 2) {
-                    ForEach(NotchTab.visible(gitlab: gitlab.isConfigured), id: \.self) { tab in
-                        TabButton(title: tab.title, selected: ui.tab == tab) { ui.tab = tab }
-                    }
+                ViewThatFits(in: .horizontal) {
+                    sourceButtons(compact: false)
+                    sourceButtons(compact: true)
                 }
-                Spacer(minLength: ui.notchWidth + 12)
-                Text(summary).font(.system(size: 11)).foregroundStyle(Ink.muted).lineLimit(1)
+                .frame(width: wing, alignment: .leading)
+                Spacer(minLength: 0)
+                Text(summary)
+                    .font(.system(size: 11)).foregroundStyle(Ink.muted)
+                    .lineLimit(1).truncationMode(.tail)
+                    .frame(width: wing, alignment: .trailing)
             }
             .frame(height: ui.notchHeight)
 
-            switch ui.tab {
+            // Подвкладки источника — под челкой, где места хватает.
+            HStack(spacing: 2) {
+                ForEach(tab.source.tabs, id: \.self) { t in
+                    TabButton(title: title(t), selected: tab == t) { ui.tab = t }
+                }
+                Spacer(minLength: 8)
+                if tab.source == .gitlab { GitLabStatus(gitlab: gitlab) }
+            }
+            .padding(.top, -4)
+
+            switch tab {
             case .sessions: sessionsTab
             case .today: TodayTab(store: store)
             case .week: WeekTab(store: store)
-            case .mergeRequests:
-                if gitlab.isConfigured {
-                    MergeRequestsTab(gitlab: gitlab, ui: ui, actions: actions)
-                } else {
-                    sessionsTab
-                }
+            case .mine, .review: MergeRequestsTab(gitlab: gitlab, ui: ui, tab: tab, actions: actions)
             }
 
             if ui.pinned {
                 Text(hint).font(.system(size: 10)).foregroundStyle(Ink.muted)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.bottom, 14)
+        .padding(.horizontal, Self.padding)
+        .padding(.bottom, Self.padding)
+    }
+
+    private func sourceButtons(compact: Bool) -> some View {
+        HStack(spacing: 2) {
+            ForEach(NotchSource.visible(gitlab: gitlab.isConfigured), id: \.self) { source in
+                SourceButton(source: source, selected: tab.source == source, compact: compact,
+                             badge: source == .gitlab ? gitlab.attentionKind?.color : nil) { ui.select(source) }
+            }
+        }
+        .fixedSize()
+    }
+
+    private func title(_ t: NotchTab) -> String {
+        guard let s = gitlab.snapshot else { return t.title }
+        switch t {
+        case .mine: return t.title + " \(s.authored.count)"
+        case .review: return t.title + " \(s.review.count)"
+        default: return t.title
+        }
     }
 
     @ViewBuilder private var sessionsTab: some View {
@@ -234,7 +283,7 @@ private struct ExpandedView: View {
     }
 
     private var summary: String {
-        if ui.tab == .mergeRequests && gitlab.isConfigured { return gitlab.summary }
+        if tab.source == .gitlab { return gitlab.summary }
         let working = store.visibleSessions.filter { $0.phase == .working }.count
         let total = store.visibleSessions.count
         if total == 0 { return L("no sessions", "нет сессий") }
@@ -243,11 +292,12 @@ private struct ExpandedView: View {
 
     private var hint: String {
         let base = L("↑↓ select · ⏎ open · Tab tabs · Esc close", "↑↓ выбор · ⏎ перейти · Tab вкладки · Esc закрыть")
-        if ui.tab == .mergeRequests { return L("R refresh · ", "R обновить · ") + base }
+        let sources = gitlab.isConfigured ? L(" · ←→ source", " · ←→ источник") : ""
+        if tab.source == .gitlab { return L("R refresh · ", "R обновить · ") + base + sources }
         if let s = store.sessions.first(where: { $0.id == ui.selectedID }), let p = s.pending, p.questions.isEmpty {
             return L("A allow · S always · D deny · T terminal · ", "A разрешить · S всегда · D отклонить · T в терминале · ") + base
         }
-        return base
+        return base + sources
     }
 }
 
@@ -267,6 +317,35 @@ private struct TabButton: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct SourceButton: View {
+    let source: NotchSource
+    let selected: Bool
+    let compact: Bool
+    /// Цвет точки непросмотренных событий.
+    let badge: Color?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: source.symbol).font(.system(size: 9, weight: .bold))
+                if !compact { Text(source.title) }
+            }
+            .font(.system(size: 11, weight: selected ? .semibold : .regular))
+            .foregroundStyle(selected ? Ink.primary : Ink.muted)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(selected ? Color.white.opacity(0.12) : .clear))
+            .overlay(alignment: .topTrailing) {
+                if let badge, !selected { Circle().fill(badge).frame(width: 5, height: 5).offset(x: -2, y: 1) }
+            }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(source.title)
     }
 }
 
@@ -1064,10 +1143,11 @@ struct ClaudeSpinner: View {
 private struct MergeRequestsTab: View {
     @ObservedObject var gitlab: GitLabStore
     @ObservedObject var ui: NotchUIState
+    let tab: NotchTab
     let actions: NotchActions
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             if let error = gitlab.error {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
@@ -1078,56 +1158,49 @@ private struct MergeRequestsTab: View {
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color.yellow.opacity(0.12)))
             }
             if let s = gitlab.snapshot {
-                if s.all.count > 6 {
-                    ScrollView { lists(s) }.frame(height: 440)
+                let list = tab == .review ? s.review : s.authored
+                if list.isEmpty {
+                    Text(tab == .review ? L("Nobody is waiting for your review", "Никто не ждёт вашего ревью")
+                                        : L("No open merge requests", "Открытых merge requests нет"))
+                        .font(.system(size: 12)).foregroundStyle(Ink.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                } else if list.count > 6 {
+                    ScrollView { rows(list, me: s.username) }.frame(height: 440)
                 } else {
-                    lists(s)
+                    rows(list, me: s.username)
                 }
             } else if gitlab.error == nil {
                 ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 44)
             }
-            footer
         }
         .onAppear { gitlab.refreshIfStale(maxAge: 60) }
     }
 
-    private func lists(_ s: GitLab.Snapshot) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionTitle(text: L("My merge requests", "Мои merge requests"), count: s.authored.count)
-            if s.authored.isEmpty {
-                Text(L("No open merge requests", "Открытых merge requests нет"))
-                    .font(.system(size: 12)).foregroundStyle(Ink.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 36)
-            }
-            ForEach(s.authored) { mr in row(mr, me: s.username) }
-            if !s.review.isEmpty {
-                SectionTitle(text: L("Review requested", "Ждут моего ревью"), count: s.review.count).padding(.top, 4)
-                ForEach(s.review) { mr in row(mr, me: s.username) }
+    private func rows(_ list: [MergeRequest], me: String) -> some View {
+        VStack(spacing: 6) {
+            ForEach(list) { mr in
+                MergeRequestRow(mr: mr, event: gitlab.attention[mr.id], approvedByMe: mr.approvedBy.contains(me),
+                                selected: ui.selectedMR == mr.id) { actions.openMergeRequest(mr) }
             }
         }
     }
+}
 
-    private func row(_ mr: MergeRequest, me: String) -> some View {
-        MergeRequestRow(mr: mr, approvedByMe: mr.approvedBy.contains(me), selected: ui.selectedMR == mr.id) {
-            actions.openMergeRequest(mr)
-        }
-    }
+/// Когда обновлялось и кнопка обновления — справа в строке подвкладок GitLab.
+private struct GitLabStatus: View {
+    @ObservedObject var gitlab: GitLabStore
 
-    private var footer: some View {
+    var body: some View {
         HStack(spacing: 6) {
-            if let host = Prefs.gitlabHostURL?.host {
-                Text(host)
-            }
             if let last = gitlab.lastUpdate {
-                Text("· " + L("updated ", "обновлено ") + Fmt.ago(last))
+                TimelineView(.periodic(from: .now, by: 30)) { _ in Text(Fmt.ago(last)) }
             }
-            Spacer()
             if gitlab.loading {
                 ProgressView().controlSize(.mini)
             } else {
                 Button { gitlab.refresh() } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.plain)
-                    .help(L("Refresh", "Обновить"))
+                    .help(L("Refresh", "Обновить") + (Prefs.gitlabHostURL?.host.map { " · " + $0 } ?? ""))
             }
         }
         .font(.system(size: 10))
@@ -1135,19 +1208,20 @@ private struct MergeRequestsTab: View {
     }
 }
 
-private struct SectionTitle: View {
-    let text: String
-    let count: Int
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(text).font(.system(size: 11, weight: .semibold)).foregroundStyle(Ink.secondary)
-            Text("\(count)").font(.system(size: 10, weight: .semibold)).foregroundStyle(Ink.muted)
+extension GitLab.Event.Kind {
+    var color: Color {
+        switch self {
+        case .pipelineFailed: return .red
+        case .reviewRequested: return .claude
+        case .readyToMerge: return .green
         }
     }
 }
 
 private struct MergeRequestRow: View {
     let mr: MergeRequest
+    /// Непросмотренное событие по этому MR.
+    let event: GitLab.Event.Kind?
     let approvedByMe: Bool
     let selected: Bool
     let open: () -> Void
@@ -1158,7 +1232,10 @@ private struct MergeRequestRow: View {
             PipelineIcon(pipeline: mr.pipeline).frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(mr.title)
+                    if let event {
+                        Circle().fill(event.color).frame(width: 6, height: 6)
+                    }
+                    Text(mr.displayTitle)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(mr.draft ? Ink.secondary : Ink.primary)
                         .lineLimit(1)
