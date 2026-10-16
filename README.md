@@ -2,14 +2,18 @@
 
 Your dev status in the MacBook notch: Claude Code sessions, GitLab merge requests and more.
 
-![Peppap: Claude Code sessions in the notch](docs/demo.gif)
+![Peppap: Claude Code sessions and GitLab merge requests in the notch](docs/demo.gif)
 
 <sub>Full video: [docs/demo.mp4](docs/demo.mp4). The demo uses made-up projects and data.</sub>
 
 <table>
   <tr>
-    <td><img src="docs/screenshot-permission.png" alt="Permission request with a change preview"></td>
-    <td><img src="docs/screenshot-today.png" alt="Today tab: usage limits and task timeline"></td>
+    <td><img src="docs/screenshot-permission.png" alt="Claude: permission request with a change preview"></td>
+    <td><img src="docs/screenshot-today.png" alt="Claude: Today tab with usage limits and task timeline"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshot-gitlab-mine.png" alt="GitLab: my merge requests, one ready to merge with a Merge button"></td>
+    <td><img src="docs/screenshot-gitlab-review.png" alt="GitLab: merge requests waiting for my review, with an Approve button"></td>
   </tr>
 </table>
 
@@ -100,11 +104,12 @@ Only the Command Line Tools are needed (Xcode is optional). Run the tests with `
 
 Run `scripts/setup-signing.sh` once. It creates a local signing certificate in a separate keychain, so macOS permissions (such as controlling the terminal) survive rebuilds.
 
-Peppap records its own README demo: ✦ menu → Record demo video…. This needs the Screen Recording permission. Then build the GIF and MP4 from the recording:
+Peppap records its own README demo with made-up sessions and merge requests: ✦ menu → Record demo video…. This needs the Screen Recording permission. To record in English regardless of the interface language, run `curl "http://127.0.0.1:47821/demo-record?lang=en"` instead. Then build the GIF, the MP4 and the screenshots from the recording:
 
 ```sh
-swiftc scripts/make-demo-media.swift -o /tmp/make-demo-media
-/tmp/make-demo-media ~/Movies/Peppap/peppap-demo.mov docs 3 41 1840 10
+. scripts/lib.sh && swiftc -sdk "$(pick_sdk)" scripts/make-demo-media.swift -o /tmp/make-demo-media
+/tmp/make-demo-media ~/Movies/Peppap/peppap-demo.mov docs 3 52 1840 10 \
+  permission@10 today@32 gitlab-review@50 gitlab-mine@54
 ```
 
 ## Contributing and releases

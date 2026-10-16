@@ -306,9 +306,10 @@ final class NotchController {
     }
 
     /// Раскрыть на нужной вкладке (для сценария демо).
-    func show(tab: NotchTab) {
+    func show(tab: NotchTab, mergeRequest: String? = nil) {
         collapseWork?.cancel()
         ui.tab = tab
+        ui.selectedMR = mergeRequest
         ui.isExpanded = true
     }
 

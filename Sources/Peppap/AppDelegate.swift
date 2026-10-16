@@ -35,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 NSWorkspace.shared.open(mr.url)
             }
         ))
-        demo = DemoRecorder(store: store, notch: notch)
+        demo = DemoRecorder(store: store, gitlab: gitlab, notch: notch)
         HookInstaller.updateIfNeeded()
         store.hooksInstalled = HookInstaller.isInstalled
         store.onAttention = { [weak self] s in self?.attention(s) }
@@ -79,7 +79,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 CGRequestScreenCaptureAccess()
                 return "no screen recording permission\n"
             }
-            self.startDemo(record: path.hasPrefix("/demo-record"))
+            // ?lang=en — записать на другом языке; настройка вернётся после записи.
+            let lang = URLComponents(string: path)?.queryItems?.first { $0.name == "lang" }?.value
+            self.startDemo(record: path.hasPrefix("/demo-record"), language: lang.flatMap(AppLanguage.init(rawValue:)))
             return "started\n"
         }
         do {
@@ -403,8 +405,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         startDemo(record: true)
     }
 
-    private func startDemo(record: Bool) {
+    private func startDemo(record: Bool, language: AppLanguage? = nil) {
+        let defaults = UserDefaults.standard
+        let previous = defaults.string(forKey: L10n.key)
+        if let language { defaults.set(language.rawValue, forKey: L10n.key) }
         demo.start(record: record) { url in
+            if language != nil { defaults.set(previous, forKey: L10n.key) }
             if let url { NSWorkspace.shared.activateFileViewerSelecting([url]) }
         }
     }

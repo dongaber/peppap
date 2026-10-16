@@ -1,19 +1,21 @@
 import AppKit
 import SwiftUI
 
-/// Записывает демо-ролик для README: выдуманные сессии, нейтральный фон, видео области вокруг челки.
+/// Записывает демо-ролик для README: выдуманные сессии и merge requests, нейтральный фон, видео области вокруг челки.
 @MainActor
 final class DemoRecorder {
-    static let duration: TimeInterval = 46
+    static let duration: TimeInterval = 58
     static let size = CGSize(width: 920, height: 440)
 
     private let store: SessionStore
+    private let gitlab: GitLabStore
     private let notch: NotchController
     private var backdrop: NSWindow?
     private(set) var isRunning = false
 
-    init(store: SessionStore, notch: NotchController) {
+    init(store: SessionStore, gitlab: GitLabStore, notch: NotchController) {
         self.store = store
+        self.gitlab = gitlab
         self.notch = notch
     }
 
@@ -62,6 +64,7 @@ final class DemoRecorder {
             self.notch.scripted = false
             self.notch.collapse()
             self.store.endDemo()
+            self.gitlab.endDemo()
             self.backdrop?.orderOut(nil)
             self.backdrop = nil
             self.isRunning = false
@@ -126,6 +129,41 @@ final class DemoRecorder {
         store.beginDemo(history: records, usage: usage,
                         fiveHour: StatusInfo.Limit(percent: 42, resetsAt: now.addingTimeInterval(2 * 3600 + 900)),
                         sevenDay: StatusInfo.Limit(percent: 18, resetsAt: now.addingTimeInterval(4 * 86400)))
+        gitlab.beginDemo(Self.gitlabSnapshot(later: false))
+    }
+
+    /// Выдуманные merge requests. `later` — следующее «обновление»: пайплайн прошёл, позвали на ревью.
+    static func gitlabSnapshot(later: Bool) -> GitLab.Snapshot {
+        func mr(_ iid: String, _ title: String, project: String, author: String? = nil, mine: Bool, status: String,
+                pipeline: MergeRequest.Pipeline?, draft: Bool = false, approvedBy: [String] = [], notes: Int = 0,
+                minutesAgo: Double) -> MergeRequest {
+            var m = MergeRequest(iid: iid, title: title, url: URL(string: "https://gitlab.example.com/\(project)/-/merge_requests/\(iid)")!,
+                                 project: project, author: author, mine: mine, draft: draft,
+                                 updatedAt: Date().addingTimeInterval(-minutesAgo * 60), conflicts: false, mergeStatus: status,
+                                 discussionsResolved: true, pipeline: pipeline, notes: notes, approvedBy: approvedBy)
+            m.sha = "demo"
+            m.pipelineID = pipeline == nil ? nil : "gid://gitlab/Ci::Pipeline/\(iid)"
+            m.can = MergeRequest.Permissions(approve: true, merge: true, update: true, pushToSourceBranch: true, retryPipeline: true)
+            return m
+        }
+        let theme = later
+            ? mr("214", "Add a dark theme toggle to settings", project: "acme/demo-app", mine: true, status: "MERGEABLE",
+                 pipeline: .success, approvedBy: ["kate"], notes: 3, minutesAgo: 1)
+            : mr("214", "Add a dark theme toggle to settings", project: "acme/demo-app", mine: true, status: "CI_STILL_RUNNING",
+                 pipeline: .running, notes: 2, minutesAgo: 18)
+        var review = [mr("57", "Paginate the orders endpoint", project: "acme/api-server", author: "kate", mine: false,
+                         status: "NOT_APPROVED", pipeline: .success, notes: 5, minutesAgo: 40)]
+        if later {
+            review.insert(mr("12", "Make the header responsive", project: "acme/landing", author: "oleg", mine: false,
+                             status: "NOT_APPROVED", pipeline: .success, notes: 1, minutesAgo: 0.5), at: 0)
+        }
+        return GitLab.Snapshot(username: "alex", authored: [
+            theme,
+            mr("88", "Fix the flaky auth snapshot test", project: "acme/api-server", mine: true, status: "CI_MUST_PASS",
+               pipeline: .failed, notes: 2, minutesAgo: 65),
+            mr("31", "Draft: CSV export for reports", project: "acme/landing", mine: true, status: "DRAFT_STATUS",
+               pipeline: .success, draft: true, minutesAgo: 190),
+        ], review: review)
     }
 
     // MARK: - Сценарий
@@ -224,11 +262,24 @@ final class DemoRecorder {
             (38.5, { self.notch.show(tab: .sessions) }),
             (40.5, { self.notch.collapse() }),
             (41.5, { self.store.handle(ev(b, "Stop") { $0.lastAnswer = L("Snapshot updated, auth tests pass.", "Снапшот обновлён, тесты авторизации проходят.") }) }),
+            // GitLab: пока сессии ничего не делают, свёрнутая челка показывает новые события.
+            (43.0, { self.store.markSeen(a); self.store.markSeen(b) }),
+            (44.0, { self.gitlab.demoApply(Self.gitlabSnapshot(later: true)) }),
+            (46.5, { self.notch.show(tab: .review, mergeRequest: self.demoMR("12")?.id) }),
+            (48.5, { if let mr = self.demoMR("12") { self.gitlab.perform(.approve, on: mr) } }),
+            (50.5, { self.notch.show(tab: .mine, mergeRequest: self.demoMR("214")?.id) }),
+            (52.0, { if let mr = self.demoMR("214") { _ = self.notch.ui.confirm(.merge, on: mr.id) } }),
+            (53.5, { if let mr = self.demoMR("214"), self.notch.ui.confirm(.merge, on: mr.id) { self.gitlab.perform(.merge, on: mr) } }),
+            (56.0, { self.notch.collapse() }),
         ]
         for (t, step) in steps {
             DispatchQueue.main.asyncAfter(deadline: .now() + lead + t) { step() }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + lead + Self.duration - 0.8) { done() }
+    }
+
+    private func demoMR(_ iid: String) -> MergeRequest? {
+        gitlab.snapshot?.all.first { $0.iid == iid }
     }
 }
 
