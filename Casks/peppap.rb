@@ -1,6 +1,6 @@
 cask "peppap" do
-  version "0.4.0"
-  sha256 "136372b13cea765f9191559907d28dcdf6aaa99c8842ea33b7f1c0d31b98789a"
+  version "0.4.1"
+  sha256 "b810626b6e77d87bc3f73c4f6ca38335155c63a96839f64b1a40fa66dc713aab"
 
   url "https://github.com/dongaber/peppap/releases/download/v#{version}/Peppap-#{version}.zip"
   name "Peppap"
