@@ -50,11 +50,13 @@ The expanded notch has a source switch next to the notch (Claude · GitLab) and 
 With [Homebrew](https://brew.sh):
 
 ```sh
-brew tap dongaber/peppap https://github.com/dongaber/peppap
-brew install --cask peppap
+brew install --cask dongaber/peppap/peppap
 ```
 
 Peppap updates itself after that (✦ menu → Update…), and `brew upgrade` works too.
+
+> Installed with Homebrew before 0.6.0? The cask moved to [dongaber/homebrew-peppap](https://github.com/dongaber/homebrew-peppap). Point the tap there once:
+> `brew tap --custom-remote dongaber/peppap https://github.com/dongaber/homebrew-peppap`
 
 Or download `Peppap-<version>.dmg` from [Releases](../../releases) and drag Peppap to Applications.
 
@@ -104,19 +106,10 @@ swiftc scripts/make-demo-media.swift -o /tmp/make-demo-media
 /tmp/make-demo-media ~/Movies/Peppap/peppap-demo.mov docs 3 41 1840 10
 ```
 
-## Versioning and releases
+## Contributing and releases
 
-- The version lives in the `VERSION` file (SemVer). The build number is the commit count.
-- Changes go into the `## [Unreleased]` section of `CHANGELOG.md`.
-- To cut a release:
-
-  ```sh
-  scripts/release.sh 0.4.0              # updates VERSION + CHANGELOG, commits and tags v0.4.0
-  git push origin main --follow-tags    # GitHub Actions builds and publishes the release
-  ```
-
-- **CI** (`.github/workflows/ci.yml`) builds a universal app on every push to `main` and every pull request; the `.zip` and `.dmg` are attached as build artifacts.
-- **Release** (`.github/workflows/release.yml`) runs on `vX.Y.Z` tags. It checks the tag matches `VERSION`, runs the tests, builds the app, publishes a GitHub Release with the `.dmg`, `.zip`, `SHA256SUMS.txt` and notes from the changelog, then bumps `Casks/peppap.rb` on `main`.
+Branches, commit messages and the release process are described in [CONTRIBUTING.md](CONTRIBUTING.md).
+In short: `main` is protected, changes go through squash-merged pull requests with [Conventional Commits](https://www.conventionalcommits.org) titles, and `bun run release` cuts a version.
 
 ## How it works
 

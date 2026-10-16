@@ -1,6 +1,6 @@
 name: Release
 
-# Запускается тегом vX.Y.Z (его создаёт scripts/release.sh).
+# Запускается тегом vX.Y.Z или vX.Y.Z-beta.N (его создаёт `bun run release`).
 on:
   push:
     tags: ['v*.*.*']
@@ -17,13 +17,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Версия из тега совпадает с VERSION
+      - name: Версия из тега совпадает с package.json
         run: |
+          . scripts/lib.sh
           TAG="${GITHUB_REF_NAME#v}"
-          FILE="$(tr -d ' \n' < VERSION)"
-          echo "Тег: $TAG, VERSION: $FILE"
-          [ "$TAG" = "$FILE" ] || { echo "::error::Тег v$TAG не совпадает с VERSION ($FILE)"; exit 1; }
+          FILE="$(app_version)"
+          echo "Тег: $TAG, package.json: $FILE"
+          [ "$TAG" = "$FILE" ] || { echo "::error::Тег v$TAG не совпадает с package.json ($FILE)"; exit 1; }
           echo "VERSION=$FILE" >> "$GITHUB_ENV"
+          # 0.6.0-beta.1 — пререлиз: не «latest» для автообновления и без обновления cask.
+          case "$FILE" in *-*) echo "PRERELEASE=true" ;; *) echo "PRERELEASE=false" ;; esac >> "$GITHUB_ENV"
 
       - name: Тесты
         run: scripts/test.sh
@@ -43,7 +46,7 @@ jobs:
 
           ---
 
-          **Install:** download the `.dmg` and drag Peppap to Applications.
+          **Install:** `brew install --cask dongaber/peppap/peppap`, or download the `.dmg` and drag Peppap to Applications.
           The app is not notarized, so on first launch run:
 
           ```sh
@@ -58,19 +61,30 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          FLAGS=""
+          [ "$PRERELEASE" = true ] && FLAGS="--prerelease"
+          # shellcheck disable=SC2086
           gh release create "$GITHUB_REF_NAME" dist/* \
             --title "Peppap $VERSION" \
             --notes-file notes.md \
-            --verify-tag
+            --verify-tag $FLAGS
 
-      - name: Обновление Homebrew cask
+      - name: Обновление Homebrew tap
+        if: env.PRERELEASE == 'false'
+        env:
+          # Deploy key с правом записи в dongaber/homebrew-peppap.
+          TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
         run: |
           SHA=$(shasum -a 256 "dist/Peppap-$VERSION.zip" | awk '{print $1}')
-          git fetch origin main
-          git checkout -B main origin/main
+          KEY="$RUNNER_TEMP/tap_key"
+          printf '%s\n' "$TAP_DEPLOY_KEY" > "$KEY"
+          chmod 600 "$KEY"
+          export GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          git clone --depth 1 git@github.com:dongaber/homebrew-peppap.git "$RUNNER_TEMP/tap"
+          cd "$RUNNER_TEMP/tap"
           sed -i '' -E "s/^  version \".*\"/  version \"$VERSION\"/; s/^  sha256 \".*\"/  sha256 \"$SHA\"/" Casks/peppap.rb
           if git diff --quiet; then echo "Cask уже актуален"; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "Update Homebrew cask to $VERSION"
-          git push origin main
+          git commit -am "peppap $VERSION"
+          git push origin HEAD

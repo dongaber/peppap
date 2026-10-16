@@ -3,7 +3,8 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-VERSION=$(tr -d ' \n' < VERSION)
+. scripts/lib.sh
+VERSION=$(app_version)
 APP=build/Peppap.app
 [ -d "$APP" ] || { echo "Сначала соберите приложение: ./build.sh" >&2; exit 1; }
 
