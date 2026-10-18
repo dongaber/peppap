@@ -7,15 +7,15 @@ final class DemoRecorder {
     static let duration: TimeInterval = 58
     static let size = CGSize(width: 920, height: 440)
 
-    private let store: SessionStore
-    private let gitlab: GitLabStore
     private let notch: NotchController
     private var backdrop: NSWindow?
     private(set) var isRunning = false
+    /// Выдуманные данные: создаются на время сценария, настоящие сторы его не замечают.
+    private var store: SessionStore!
+    private var gitlab: GitLabStore!
+    private var gitlabSource: DemoGitLab!
 
-    init(store: SessionStore, gitlab: GitLabStore, notch: NotchController) {
-        self.store = store
-        self.gitlab = gitlab
+    init(notch: NotchController) {
         self.notch = notch
     }
 
@@ -26,7 +26,8 @@ final class DemoRecorder {
     }
 
     /// Запуск записи. `record: false` — только проиграть сценарий (посмотреть без записи).
-    func start(record: Bool, completion: @escaping (URL?) -> Void) {
+    /// `language` — записать на другом языке; прежняя настройка вернётся после записи.
+    func start(record: Bool, language: AppLanguage? = nil, completion: @escaping (URL?) -> Void) {
         guard !isRunning else { return }
         if record && !CGPreflightScreenCaptureAccess() {
             CGRequestScreenCaptureAccess()
@@ -34,10 +35,15 @@ final class DemoRecorder {
             return
         }
         isRunning = true
+        let defaults = UserDefaults.standard
+        let previousLanguage = defaults.string(forKey: L10n.key)
+        if let language { defaults.set(language.rawValue, forKey: L10n.key) }
         let screen = NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main ?? NSScreen.screens[0]
         showBackdrop(on: screen)
-        beginFakeState()
+        let real = (store: notch.store, gitlab: notch.gitlab)
+        makeFakeState()
         notch.collapse()
+        notch.display(store: store, gitlab: gitlab)
         notch.scripted = true
 
         var process: Process?
@@ -63,8 +69,11 @@ final class DemoRecorder {
             guard let self else { return }
             self.notch.scripted = false
             self.notch.collapse()
-            self.store.endDemo()
-            self.gitlab.endDemo()
+            self.notch.display(store: real.store, gitlab: real.gitlab)
+            self.store = nil
+            self.gitlab = nil
+            self.gitlabSource = nil
+            if language != nil { defaults.set(previousLanguage, forKey: L10n.key) }
             self.backdrop?.orderOut(nil)
             self.backdrop = nil
             self.isRunning = false
@@ -95,7 +104,7 @@ final class DemoRecorder {
 
     // MARK: - Выдуманные данные
 
-    private func beginFakeState() {
+    private func makeFakeState() {
         let cal = Calendar.current
         let now = Date()
         let projects = ["demo-app", "api-server", "landing", "ios-client"]
@@ -126,10 +135,13 @@ final class DemoRecorder {
         usage.todayCost = costs[6]
         usage.weekCost = costs.reduce(0, +)
         usage.dailyCost = daily
-        store.beginDemo(history: records, usage: usage,
-                        fiveHour: StatusInfo.Limit(percent: 42, resetsAt: now.addingTimeInterval(2 * 3600 + 900)),
-                        sevenDay: StatusInfo.Limit(percent: 18, resetsAt: now.addingTimeInterval(4 * 86400)))
-        gitlab.beginDemo(Self.gitlabSnapshot(later: false))
+        store = SessionStore(history: records, usage: usage,
+                             fiveHour: StatusInfo.Limit(percent: 42, resetsAt: now.addingTimeInterval(2 * 3600 + 900)),
+                             sevenDay: StatusInfo.Limit(percent: 18, resetsAt: now.addingTimeInterval(4 * 86400)))
+        store.hooksInstalled = true // без баннера «Подключите hooks»
+        gitlabSource = DemoGitLab(Self.gitlabSnapshot(later: false))
+        gitlab = GitLabStore(source: gitlabSource)
+        gitlab.refresh()
     }
 
     /// Выдуманные merge requests. `later` — следующее «обновление»: пайплайн прошёл, позвали на ревью.
@@ -187,10 +199,10 @@ final class DemoRecorder {
             let json: [String: Any] = ["session_id": id, "context_window": ["used_percentage": ctx],
                                        "cost": ["total_lines_added": added, "total_lines_removed": removed]]
             guard let data = try? JSONSerialization.data(withJSONObject: json), let info = StatusInfo(json: data) else { return }
-            store.demoUpdate(id) { $0.status = info }
+            store.update(id) { $0.status = info }
         }
         func metrics(_ id: String, task: Double, total: Double) {
-            store.demoUpdate(id) {
+            store.update(id) {
                 var m = SessionMetrics()
                 m.taskTokens = Int(task * 160_000); m.taskCost = task
                 m.tokens = Int(total * 160_000); m.cost = total
@@ -264,7 +276,7 @@ final class DemoRecorder {
             (41.5, { self.store.handle(ev(b, "Stop") { $0.lastAnswer = L("Snapshot updated, auth tests pass.", "Снапшот обновлён, тесты авторизации проходят.") }) }),
             // GitLab: пока сессии ничего не делают, свёрнутая челка показывает новые события.
             (43.0, { self.store.markSeen(a); self.store.markSeen(b) }),
-            (44.0, { self.gitlab.demoApply(Self.gitlabSnapshot(later: true)) }),
+            (44.0, { self.gitlabSource.snapshot = Self.gitlabSnapshot(later: true); self.gitlab.refresh() }),
             (46.5, { self.notch.show(tab: .review, mergeRequest: self.demoMR("12")?.id) }),
             (48.5, { if let mr = self.demoMR("12") { self.gitlab.perform(.approve, on: mr) } }),
             (50.5, { self.notch.show(tab: .mine, mergeRequest: self.demoMR("214")?.id) }),

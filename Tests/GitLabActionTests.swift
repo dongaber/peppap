@@ -119,4 +119,20 @@ let gitlabActionTests: [(String, @MainActor () throws -> Void)] = [
         expect(ui.confirm(.merge, on: "b"))
         expect(!ui.isArmed(.merge, on: "b"))
     }),
+    ("стор поверх источника: загрузка и действие", {
+        let mr = try actionMR(mine: false)
+        let source = DemoGitLab(GitLab.Snapshot(username: "me", authored: [], review: [mr]), latency: 0)
+        let store = GitLabStore(source: source)
+        expect(store.isConfigured)
+        store.refresh()
+        waitUntil { store.snapshot != nil && store.canAct != nil }
+        expectEqual(store.snapshot?.review.map(\.id), [mr.id])
+        expectEqual(store.canAct, true)
+        expect(store.actions(for: mr).contains(.approve))
+        store.perform(.approve, on: mr)
+        expectEqual(store.running[mr.id], .approve)
+        waitUntil { store.running.isEmpty }
+        expectEqual(store.snapshot?.review.first?.approvedBy, ["me"])
+        expectEqual(source.snapshot.review.first?.approvedBy, ["me"])
+    }),
 ]

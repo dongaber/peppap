@@ -57,3 +57,12 @@ func isoNow(offset: TimeInterval = 0) -> String {
 func jsonLine(_ obj: [String: Any]) -> String {
     String(data: try! JSONSerialization.data(withJSONObject: obj), encoding: .utf8)!
 }
+
+/// Крутит главный цикл, пока не выполнится условие (для асинхронных задач на главном акторе).
+@MainActor
+func waitUntil(timeout: TimeInterval = 2, _ condition: () -> Bool) {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !condition() && Date() < deadline {
+        RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.01))
+    }
+}

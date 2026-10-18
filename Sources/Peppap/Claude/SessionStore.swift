@@ -8,8 +8,8 @@ enum PermissionAnswer {
 @MainActor
 final class SessionStore: ObservableObject {
     @Published private(set) var sessions: [ClaudeSession] = []
-    @Published private(set) var today = DayStats.load()
-    @Published private(set) var history = History.load()
+    @Published private(set) var today: DayStats
+    @Published private(set) var history: [TaskRecord]
     @Published var usage: UsageSummary?
     /// Точные лимиты подписки из statusLine (последние полученные).
     @Published private(set) var limits: (fiveHour: StatusInfo.Limit?, sevenDay: StatusInfo.Limit?, at: Date)?
@@ -20,9 +20,27 @@ final class SessionStore: ObservableObject {
     /// Ответ hook-скрипту, ждущему решения (nil — спросить в терминале).
     var onPermissionReply: ((String, Data?) -> Void)?
 
+    /// Пишет ли историю и статистику дня на диск (хранилище демо и тестов — только в памяти).
+    private let persistent: Bool
     private let transcripts = TranscriptReader()
     private var metricsRequested: [String: Date] = [:]
     private var permissionTimers: [String: Timer] = [:]
+
+    init(persistent: Bool = true) {
+        self.persistent = persistent
+        today = persistent ? DayStats.load() : DayStats(day: DayStats.key())
+        history = persistent ? History.load() : []
+    }
+
+    /// Хранилище в памяти с готовой историей, расходом и лимитами (демо).
+    convenience init(history: [TaskRecord], usage: UsageSummary, fiveHour: StatusInfo.Limit, sevenDay: StatusInfo.Limit) {
+        self.init(persistent: false)
+        self.history = history
+        let todays = history.filter { Calendar.current.isDateInToday($0.start) }
+        today = DayStats(day: DayStats.key(), tasks: todays.count, seconds: todays.reduce(0) { $0 + $1.duration })
+        self.usage = usage
+        limits = (fiveHour, sevenDay, Date())
+    }
 
     var visibleSessions: [ClaudeSession] { sessions.filter { !$0.hidden } }
     var topPhase: Phase { visibleSessions.map(\.phase).max() ?? .idle }
@@ -48,8 +66,6 @@ final class SessionStore: ObservableObject {
     // MARK: - События
 
     func handle(_ e: HookEvent) {
-        // Во время записи демо в челке только выдуманные сессии.
-        if demoActive && !e.sessionID.hasPrefix("demo-") { return }
         if e.name == "SessionEnd" {
             if var s = sessions.first(where: { $0.id == e.sessionID }) { releasePermission(&s) }
             sessions.removeAll { $0.id == e.sessionID }
@@ -158,7 +174,7 @@ final class SessionStore: ObservableObject {
             if let start = s.taskStart {
                 let d = Date().timeIntervalSince(start)
                 s.lastDuration = d
-                if !s.id.hasPrefix("demo-") { recordTask(s, start: start, duration: d) }
+                if persistent { recordTask(s, start: start, duration: d) }
             }
             s.taskStart = nil
             s.activity = nil
@@ -247,7 +263,6 @@ final class SessionStore: ObservableObject {
     // MARK: - Строка состояния
 
     func applyStatus(_ info: StatusInfo) {
-        if demoActive { return }
         if info.fiveHour != nil || info.sevenDay != nil {
             limits = (info.fiveHour, info.sevenDay, Date())
         }
@@ -346,39 +361,9 @@ final class SessionStore: ObservableObject {
         sessions[i].hidden = true
     }
 
-    // MARK: - Демо для записи
-
-    private var saved: (sessions: [ClaudeSession], history: [TaskRecord], today: DayStats, usage: UsageSummary?,
-                        limits: (fiveHour: StatusInfo.Limit?, sevenDay: StatusInfo.Limit?, at: Date)?)?
-    var demoActive: Bool { saved != nil }
-
-    /// Подменяет всё состояние выдуманным (без сохранения на диск); `endDemo` возвращает настоящее.
-    func beginDemo(history fake: [TaskRecord], usage fakeUsage: UsageSummary,
-                   fiveHour: StatusInfo.Limit, sevenDay: StatusInfo.Limit) {
-        guard saved == nil else { return }
-        saved = (sessions, history, today, usage, limits)
-        sessions = []
-        history = fake
-        let todays = fake.filter { Calendar.current.isDateInToday($0.start) }
-        today = DayStats(day: DayStats.key(), tasks: todays.count, seconds: todays.reduce(0) { $0 + $1.duration })
-        usage = fakeUsage
-        limits = (fiveHour, sevenDay, Date())
-    }
-
-    func endDemo() {
-        guard let s = saved else { return }
-        for var session in sessions { releasePermission(&session) }
-        sessions = s.sessions
-        history = s.history
-        today = s.today
-        usage = s.usage
-        limits = s.limits
-        saved = nil
-    }
-
-    /// Прямое изменение демо-сессии (метрики, статус), которых нет в событиях hooks.
-    func demoUpdate(_ id: String, _ change: (inout ClaudeSession) -> Void) {
-        guard demoActive, let i = sessions.firstIndex(where: { $0.id == id }) else { return }
+    /// Прямое изменение сессии: то, чего нет в событиях hooks (демо задаёт так метрики).
+    func update(_ id: String, _ change: (inout ClaudeSession) -> Void) {
+        guard let i = sessions.firstIndex(where: { $0.id == id }) else { return }
         change(&sessions[i])
     }
 
@@ -420,7 +405,7 @@ final class SessionStore: ObservableObject {
             sessions[i].subagents = 0
         }
         sessions.removeAll { $0.phase != .working && $0.pending == nil && now.timeIntervalSince($0.updatedAt) > 3 * 3600 }
-        if today.day != DayStats.key() { today = DayStats.load() }
+        if today.day != DayStats.key() { today = persistent ? DayStats.load() : DayStats(day: DayStats.key()) }
         sort()
     }
 

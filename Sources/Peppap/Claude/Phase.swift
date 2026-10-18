@@ -1,4 +1,4 @@
-import SwiftUI
+import Foundation
 
 enum Phase: Int, Comparable {
     case idle = 0, waiting, done, working, permission
@@ -15,15 +15,6 @@ enum Phase: Int, Comparable {
         case .done: return L("Done", "Готово")
         case .working: return L("Working", "Работает")
         case .permission: return L("Needs permission", "Нужно разрешение")
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .idle, .waiting: return .white.opacity(0.45)
-        case .done: return .green
-        case .working: return .claude
-        case .permission: return .yellow
         }
     }
 }
