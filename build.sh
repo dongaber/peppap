@@ -21,12 +21,14 @@ SDK=${SDK:-$(pick_sdk)}
 echo "Peppap $VERSION ($BUILD_NUMBER), архитектуры: $ARCHS"
 echo "SDK: $SDK"
 
+SOURCES=$(find Sources/Peppap -name '*.swift' | sort)
 BINARIES=""
 for arch in $ARCHS; do
+  # shellcheck disable=SC2086
   swiftc -O -sdk "$SDK" -swift-version 5 -parse-as-library \
     -target "$arch-apple-macos14.0" \
     -o "build/obj/Peppap-$arch" \
-    Sources/Peppap/*.swift
+    $SOURCES
   BINARIES="$BINARIES build/obj/Peppap-$arch"
 done
 # shellcheck disable=SC2086

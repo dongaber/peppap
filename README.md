@@ -108,25 +108,20 @@ In short: `main` is protected, changes go through squash-merged pull requests wi
 
 ## How it works
 
-| File | Purpose |
+Sources live in `Sources/Peppap/`, grouped by area:
+
+| Folder | Purpose |
 |---|---|
-| `HookInstaller.swift` | hook and status line scripts, `settings.json` changes (updated automatically on launch) |
-| `EventServer.swift` | local HTTP server for hook events and status line data |
-| `SessionStore.swift` | session state, permissions, daily stats |
-| `UsageScanner.swift` | tokens, cost and 5-hour windows from the jsonl transcripts |
-| `ProcessWatcher.swift` | running `claude` processes, transcript tail, session restore |
-| `NotchController.swift` | the notch panel, hover, auto-expand, keyboard |
-| `NotchView.swift` | SwiftUI interface |
-| `TerminalFocus.swift` | jumping to a terminal or editor, quick replies |
-| `Diff.swift` | change preview, session names and pinning |
-| `History.swift` | task history (`~/Library/Application Support/Peppap/history.json`) |
-| `Report.swift` | weekly report |
-| `DemoRecorder.swift` | demo recording for the README |
-| `HotKey.swift` | global hotkey |
-| `L10n.swift` | English and Russian strings, language switch |
-| `Quiet.swift` | do-not-disturb: calls, full screen |
-| `SettingsView.swift`, `Prefs.swift` | settings window and defaults |
-| `scripts/make-icon.swift` | app icon generator |
+| `App/` | entry point, app delegate and menu bar menu, defaults (`Prefs`), English and Russian strings (`L10n`), global hotkey |
+| `Claude/` | Claude Code sessions: hook and status line scripts (`HookInstaller`), local HTTP server for hook events (`EventServer`), hook event parsing, session state and permissions (`SessionStore`), running `claude` processes and transcripts, tokens and cost (`UsageScanner`), change preview, task history and weekly report |
+| `GitLab/` | merge requests: model, actions, API client and GraphQL parser, `GitLabStore` |
+| `Notch/` | the notch panel (`NotchController`: hover, auto-expand, keyboard) and its SwiftUI interface: `Sessions/`, `Stats/` (today and week), `MergeRequests/`, shared `Components/` |
+| `Windows/` | settings and welcome windows |
+| `System/` | Keychain, do-not-disturb (calls, full screen), jumping to a terminal or editor, self-update |
+| `Demo/` | demo recording for the README |
+| `Support/` | formatting and string helpers |
+
+Tests are in `Tests/`, one file per area. `scripts/make-icon.swift` generates the app icon.
 
 ## License
 

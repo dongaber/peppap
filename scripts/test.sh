@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 SDK=${SDK:-$(pick_sdk)}
 
 mkdir -p build
-SOURCES=$(ls Sources/Peppap/*.swift | grep -v '/App.swift$')
+SOURCES=$(find Sources/Peppap -name '*.swift' ! -path '*/App/App.swift' | sort)
 # shellcheck disable=SC2086
 swiftc -sdk "$SDK" -swift-version 5 -parse-as-library \
   -target "$(uname -m)-apple-macos14.0" \

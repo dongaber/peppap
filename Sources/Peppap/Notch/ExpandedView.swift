@@ -1,0 +1,220 @@
+import SwiftUI
+
+struct ExpandedView: View {
+    @ObservedObject var store: SessionStore
+    @ObservedObject var gitlab: GitLabStore
+    @ObservedObject var ui: NotchUIState
+    @ObservedObject var updater: Updater
+    let actions: NotchActions
+
+    static func width(notch: CGFloat) -> CGFloat { max(540, notch + 330) }
+    private static let padding: CGFloat = 14
+
+    /// Ширина «крыла» слева и справа от аппаратной челки: содержимое верхней строки не заходит под неё.
+    private var wing: CGFloat { (Self.width(notch: ui.notchWidth) - 2 * Self.padding - ui.notchWidth - 12) / 2 }
+
+    /// Вкладка выключенного источника (GitLab без настроек) не показывается.
+    private var tab: NotchTab { ui.tab.source == .gitlab && !gitlab.isConfigured ? .sessions : ui.tab }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Верхняя полоса по бокам от аппаратной челки: источники слева, сводка справа.
+            HStack(spacing: 0) {
+                ViewThatFits(in: .horizontal) {
+                    sourceButtons(compact: false)
+                    sourceButtons(compact: true)
+                }
+                .frame(width: wing, alignment: .leading)
+                Spacer(minLength: 0)
+                Text(summary)
+                    .font(.system(size: 11)).foregroundStyle(Ink.muted)
+                    .lineLimit(1).truncationMode(.tail)
+                    .frame(width: wing, alignment: .trailing)
+            }
+            .frame(height: ui.notchHeight)
+
+            // Подвкладки источника — под челкой, где места хватает.
+            HStack(spacing: 2) {
+                ForEach(tab.source.tabs, id: \.self) { t in
+                    TabButton(title: title(t), selected: tab == t) { ui.tab = t }
+                }
+                Spacer(minLength: 8)
+                if tab.source == .gitlab { GitLabStatus(gitlab: gitlab) }
+            }
+            .padding(.top, -4)
+
+            switch tab {
+            case .sessions: sessionsTab
+            case .today: TodayTab(store: store)
+            case .week: WeekTab(store: store)
+            case .mine, .review: MergeRequestsTab(gitlab: gitlab, ui: ui, tab: tab, actions: actions)
+            }
+
+            if ui.pinned {
+                Text(hint).font(.system(size: 10)).foregroundStyle(Ink.muted)
+            }
+        }
+        .padding(.horizontal, Self.padding)
+        .padding(.bottom, Self.padding)
+    }
+
+    private func sourceButtons(compact: Bool) -> some View {
+        HStack(spacing: 2) {
+            ForEach(NotchSource.visible(gitlab: gitlab.isConfigured), id: \.self) { source in
+                SourceButton(source: source, selected: tab.source == source, compact: compact,
+                             badge: source == .gitlab ? gitlab.attentionKind?.color : nil) { ui.select(source) }
+            }
+        }
+        .fixedSize()
+    }
+
+    private func title(_ t: NotchTab) -> String {
+        guard let s = gitlab.snapshot else { return t.title }
+        switch t {
+        case .mine: return t.title + " \(s.authored.count)"
+        case .review: return t.title + " \(s.review.count)"
+        default: return t.title
+        }
+    }
+
+    @ViewBuilder private var sessionsTab: some View {
+        if !store.hooksInstalled {
+            HooksBanner(action: actions.installHooks)
+        }
+        if let release = updater.available {
+            UpdateBanner(version: release.version, installing: updater.installing, action: actions.installUpdate)
+        }
+        if store.visibleSessions.isEmpty {
+            Text(L("No active sessions. Run `claude` in a terminal.", "Нет активных сессий. Запустите `claude` в терминале."))
+                .font(.system(size: 12))
+                .foregroundStyle(Ink.secondary)
+                .frame(maxWidth: .infinity, minHeight: 44)
+        } else {
+            // Без ViewThatFits: он измеряет список дважды, и размер «прыгает» во время анимации.
+            if store.visibleSessions.count > 4 {
+                ScrollView { sessionList }.frame(height: 440)
+            } else {
+                sessionList
+            }
+        }
+    }
+
+    private var sessionList: some View {
+        VStack(spacing: 6) {
+            ForEach(store.visibleSessions) { s in
+                SessionRow(session: s, selected: ui.selectedID == s.id, store: store, actions: actions)
+            }
+        }
+    }
+
+    private var summary: String {
+        if tab.source == .gitlab { return gitlab.summary }
+        let working = store.visibleSessions.filter { $0.phase == .working }.count
+        let total = store.visibleSessions.count
+        if total == 0 { return L("no sessions", "нет сессий") }
+        return working > 0 ? L("\(working) of \(total) working", "\(working) из \(total) в работе") : L("sessions: \(total)", "сессий: \(total)")
+    }
+
+    private var hint: String {
+        let base = L("↑↓ select · ⏎ open · Tab tabs · Esc close", "↑↓ выбор · ⏎ перейти · Tab вкладки · Esc закрыть")
+        let sources = gitlab.isConfigured ? L(" · ←→ source", " · ←→ источник") : ""
+        if tab.source == .gitlab {
+            let list = (tab == .review ? gitlab.snapshot?.review : gitlab.snapshot?.authored) ?? []
+            let keys = list.first { $0.id == ui.selectedMR }.map { mr in
+                gitlab.actions(for: mr).map { $0.keys[0].uppercased() + " " + $0.shortTitle.lowercased() + " · " }.joined()
+            } ?? ""
+            return keys + L("R refresh · ", "R обновить · ") + base + sources
+        }
+        if let s = store.sessions.first(where: { $0.id == ui.selectedID }), let p = s.pending, p.questions.isEmpty {
+            return L("A allow · S always · D deny · T terminal · ", "A разрешить · S всегда · D отклонить · T в терминале · ") + base
+        }
+        return base + sources
+    }
+}
+
+struct TabButton: View {
+    let title: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: selected ? .semibold : .regular))
+                .foregroundStyle(selected ? Ink.primary : Ink.muted)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(selected ? Color.white.opacity(0.12) : .clear))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct SourceButton: View {
+    let source: NotchSource
+    let selected: Bool
+    let compact: Bool
+    /// Цвет точки непросмотренных событий.
+    let badge: Color?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: source.symbol).font(.system(size: 9, weight: .bold))
+                if !compact { Text(source.title) }
+            }
+            .font(.system(size: 11, weight: selected ? .semibold : .regular))
+            .foregroundStyle(selected ? Ink.primary : Ink.muted)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(selected ? Color.white.opacity(0.12) : .clear))
+            .overlay(alignment: .topTrailing) {
+                if let badge, !selected { Circle().fill(badge).frame(width: 5, height: 5).offset(x: -2, y: 1) }
+            }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(source.title)
+    }
+}
+
+private struct HooksBanner: View {
+    let action: () -> Void
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "bolt.horizontal.circle.fill").foregroundStyle(Color.claude)
+            Text(L("Connect the hooks so Peppap can see your sessions", "Подключите hooks, чтобы Peppap видел сессии"))
+                .font(.system(size: 12)).foregroundStyle(Ink.primary.opacity(0.85))
+            Spacer()
+            Button(L("Connect", "Подключить"), action: action)
+                .buttonStyle(NotchButtonStyle(prominent: true))
+                .controlSize(.small)
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.claude.opacity(0.15)))
+    }
+}
+
+private struct UpdateBanner: View {
+    let version: String
+    let installing: Bool
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.down.circle.fill").foregroundStyle(Color.claude)
+            Text(L("Peppap \(version) is available", "Доступна версия Peppap \(version)"))
+                .font(.system(size: 12)).foregroundStyle(Ink.primary.opacity(0.85))
+            Spacer()
+            if installing {
+                ProgressView().controlSize(.small)
+            } else {
+                Button(L("Update", "Обновить"), action: action).buttonStyle(NotchButtonStyle(prominent: true))
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.claude.opacity(0.15)))
+    }
+}
