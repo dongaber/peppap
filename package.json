@@ -1,6 +1,6 @@
 {
   "name": "peppap",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "description": "Your dev status in the MacBook notch",
   "license": "MIT",

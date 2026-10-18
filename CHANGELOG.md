@@ -3,6 +3,13 @@
 All notable changes to Peppap. Versions follow [SemVer](https://semver.org/); entries are generated from
 [Conventional Commits](https://www.conventionalcommits.org) by `bun run release`.
 
+## [0.6.1](https://github.com/dongaber/peppap/compare/v0.6.0...v0.6.1) (2026-10-18)
+
+### Changed
+
+* group sources by area and split large files ([#9](https://github.com/dongaber/peppap/issues/9)) ([8238b5a](https://github.com/dongaber/peppap/commit/8238b5a17a9d4235f6b3421c111c3026db65f9c5))
+* split AppDelegate and move demo mode out of the stores ([#10](https://github.com/dongaber/peppap/issues/10)) ([27d6f79](https://github.com/dongaber/peppap/commit/27d6f79388d3d5be1316ae13740d8061fe82786b))
+
 ## [0.6.0](https://github.com/dongaber/peppap/compare/v0.5.0...v0.6.0) (2026-10-16)
 
 ### Added
