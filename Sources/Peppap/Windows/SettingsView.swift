@@ -5,6 +5,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var store: SessionStore
     @ObservedObject var gitlab: GitLabStore
+    let gitlabServer: GitLabServer
     let onInstallHooks: () -> Void
     let onUninstallHooks: () -> Void
     let onHotKeyChange: (HotKeyPreset) -> Void
@@ -189,7 +190,9 @@ struct SettingsView: View {
                     HStack {
                         SecureField("", text: $gitlabToken, prompt: Text("glpat-…"))
                             .labelsHidden()
-                            .onChange(of: gitlabToken) { _, value in gitlab.setToken(value) }
+                            .onChange(of: gitlabToken) { _, value in
+                                if gitlabServer.setToken(value) { gitlab.configurationChanged() }
+                            }
                             .onSubmit { gitlab.refresh() }
                         if let url = GitLab.normalizedHost(gitlabHost).map(tokenPageURL) {
                             Button(L("Create…", "Создать…")) { NSWorkspace.shared.open(url) }
@@ -232,7 +235,7 @@ struct SettingsView: View {
                    + "Уведомления подчиняются разделам «Уведомления» и «Не беспокоить»."))
                 .foregroundStyle(.secondary)
         }
-        .onAppear { gitlabToken = gitlab.token }
+        .onAppear { gitlabToken = gitlabServer.token }
     }
 
     @ViewBuilder private var gitlabStatus: some View {

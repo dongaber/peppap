@@ -18,9 +18,11 @@ final class NotchController {
     static let panelSize = CGSize(width: 760, height: 680)
 
     let ui = NotchUIState()
-    private let store: SessionStore
-    private let gitlab: GitLabStore
+    private(set) var store: SessionStore
+    private(set) var gitlab: GitLabStore
+    private let updater: Updater
     private let panel: NotchPanel
+    private let host: FirstMouseHostingView<AnyView>
     private let actions: NotchActions
     private var mouseTimer: Timer?
     private var keyMonitor: Any?
@@ -36,6 +38,7 @@ final class NotchController {
     init(store: SessionStore, gitlab: GitLabStore, updater: Updater, actions: NotchActions) {
         self.store = store
         self.gitlab = gitlab
+        self.updater = updater
         self.actions = actions
         panel = NotchPanel(contentRect: NSRect(origin: .zero, size: Self.panelSize),
                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -50,11 +53,10 @@ final class NotchController {
         panel.ignoresMouseEvents = true
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
 
-        let root = NotchView(store: store, gitlab: gitlab, ui: ui, updater: updater, actions: actions)
-            .frame(width: Self.panelSize.width, height: Self.panelSize.height, alignment: .top)
-        let host = FirstMouseHostingView(rootView: root)
+        host = FirstMouseHostingView(rootView: AnyView(EmptyView()))
         host.sizingOptions = []
         panel.contentView = host
+        host.rootView = rootView()
 
         layout()
         panel.orderFrontRegardless()
@@ -95,6 +97,18 @@ final class NotchController {
             }
             return handled ? nil : event
         }
+    }
+
+    /// Показывать другие данные (демо подставляет выдуманные сессии и merge requests).
+    func display(store: SessionStore, gitlab: GitLabStore) {
+        self.store = store
+        self.gitlab = gitlab
+        host.rootView = rootView()
+    }
+
+    private func rootView() -> AnyView {
+        AnyView(NotchView(store: store, gitlab: gitlab, ui: ui, updater: updater, actions: actions)
+            .frame(width: Self.panelSize.width, height: Self.panelSize.height, alignment: .top))
     }
 
     /// Экран с челкой, иначе основной.

@@ -3,39 +3,43 @@ import ServiceManagement
 import UniformTypeIdentifiers
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = SessionStore()
-    private let scanner = UsageScanner()
     private let settings = SettingsWindow()
     private let onboarding = OnboardingWindow()
     private let updater = Updater()
+    private let gitlabServer = GitLabServer()
     private var gitlab: GitLabStore!
+    private var monitor: ClaudeMonitor!
+    private var updatePrompt: UpdatePrompt!
     private var server: EventServer?
     private var notch: NotchController!
     private var hotKey: HotKey?
-    private var statusItem: NSStatusItem!
-    private var timers: [Timer] = []
-    private var scanning = false
-    private var watching = false
-    private var lastDiscovery = Date.distantPast
-    private var triedPIDs = Set<Int32>()
+    private var statusMenu: StatusMenu!
     private var demo: DemoRecorder!
+    private var debug: DebugCommands!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Prefs.register()
-        gitlab = GitLabStore()
+        gitlab = GitLabStore(source: gitlabServer)
+        monitor = ClaudeMonitor(store: store)
+        updatePrompt = UpdatePrompt(updater: updater)
         notch = NotchController(store: store, gitlab: gitlab, updater: updater, actions: NotchActions(
             select: { [weak self] s in self?.select(s) },
             installHooks: { [weak self] in self?.installHooks() },
             rename: { [weak self] s in self?.rename(s) },
             send: { [weak self] s, text in self?.send(text, to: s) },
-            installUpdate: { [weak self] in self?.installAvailableUpdate() },
+            installUpdate: { [weak self] in self?.updatePrompt.installAvailable() },
             openMergeRequest: { [weak self] mr in
                 self?.notch.collapse()
                 NSWorkspace.shared.open(mr.url)
             }
         ))
-        demo = DemoRecorder(store: store, gitlab: gitlab, notch: notch)
+        updatePrompt.willPresent = { [weak self] in self?.notch.collapse() }
+        demo = DemoRecorder(notch: notch)
+        debug = DebugCommands(updater: updater, updatePrompt: updatePrompt, demo: demo, onboarding: onboarding,
+                              showOnboarding: { [weak self] in self?.showOnboarding() },
+                              startDemo: { [weak self] record, language in self?.startDemo(record: record, language: language) })
         HookInstaller.updateIfNeeded()
         store.hooksInstalled = HookInstaller.isInstalled
         store.onAttention = { [weak self] s in self?.attention(s) }
@@ -48,47 +52,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
         store.onPermissionReply = { [weak server] id, body in server?.reply(id, json: body) }
         server.debugState = { [weak self] in self?.store.debugDescription ?? "" }
-        server.debugCommand = { [weak self] path in
-            guard let self else { return "" }
-            if path.hasPrefix("/demo-update-check") {
-                Task { await self.updater.check(manual: true) }
-                return "checking\n"
-            }
-            if path.hasPrefix("/demo-update-status") {
-                return "current=\(Updater.currentVersion) available=\(self.updater.available?.version ?? "-") installing=\(self.updater.installing)\n"
-            }
-            if path.hasPrefix("/demo-update-install") {
-                self.installAvailableUpdate()
-                return "installing\n"
-            }
-            if path.hasPrefix("/demo-shot-onboarding") {
-                // Снимок окна приветствия (нужно разрешение на запись экрана).
-                self.showOnboarding()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                    guard let id = self.onboarding.windowNumber else { return }
-                    let out = DemoRecorder.outputURL.deletingLastPathComponent().appendingPathComponent("onboarding.png")
-                    let p = Process()
-                    p.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-                    p.arguments = ["-x", "-o", "-l", "\(id)", out.path]
-                    try? p.run()
-                }
-                return "ok\n"
-            }
-            if self.demo.isRunning { return "already running\n" }
-            if path.hasPrefix("/demo-record") && !CGPreflightScreenCaptureAccess() {
-                CGRequestScreenCaptureAccess()
-                return "no screen recording permission\n"
-            }
-            // ?lang=en — записать на другом языке; настройка вернётся после записи.
-            let lang = URLComponents(string: path)?.queryItems?.first { $0.name == "lang" }?.value
-            self.startDemo(record: path.hasPrefix("/demo-record"), language: lang.flatMap(AppLanguage.init(rawValue:)))
-            return "started\n"
-        }
+        server.debugCommand = { [weak self] path in self?.debug.handle(path) ?? "" }
         do {
             try server.start()
             self.server = server
         } catch {
-            alert(L("Couldn't open port ", "Не удалось открыть порт ") + "\(EventServer.port)", error.localizedDescription)
+            showAlert(L("Couldn't open port ", "Не удалось открыть порт ") + "\(EventServer.port)", error.localizedDescription)
         }
 
         let hotKey = HotKey { [weak self] in
@@ -97,27 +66,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotKey.set(Prefs.hotkey)
         self.hotKey = hotKey
 
-        setupStatusItem()
+        statusMenu = StatusMenu(store: store, gitlab: gitlab, updater: updater)
+        statusMenu.delegate = self
         updater.startAutomaticChecks()
         gitlab.start()
         if OnboardingWindow.shouldShow(hooksInstalled: store.hooksInstalled) { showOnboarding() }
-        refreshUsage()
-        watchProcesses()
-        timers.append(Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.watchProcesses() }
-        })
-        timers.append(Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.refreshUsage()
-                self?.store.prune()
-            }
-        })
+        monitor.start()
     }
 
     // MARK: - События
 
     private func attention(_ s: ClaudeSession) {
-        if store.demoActive { return } // сценарий демо сам управляет челкой и не шумит
+        if demo.isRunning { return } // сценарий демо сам управляет челкой и не шумит
         let quiet = Quiet.isQuiet
         if Prefs.sound && !quiet {
             if s.phase == .permission {
@@ -137,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// События GitLab за одно обновление: один звук и одно раскрытие — на самом важном.
     private func attention(_ events: [GitLab.Event]) {
-        guard !store.demoActive, let top = events.max(by: { $0.kind < $1.kind }) else { return }
+        guard !demo.isRunning, let top = events.max(by: { $0.kind < $1.kind }) else { return }
         let quiet = Quiet.isQuiet
         if Prefs.sound && !quiet { NSSound(named: Prefs.gitlabSound)?.play() }
         // Пока Claude работает или ждёт ответа, челку занимают сессии; событие останется в индикаторе.
@@ -175,247 +135,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// Раз в 5 секунд: закрытые терминалы, прерванные задачи; раз в 30 секунд — поиск незнакомых сессий.
-    private func watchProcesses() {
-        guard !watching, !store.demoActive else { return }
-        watching = true
-        let known = store.knownTTYs
-        let stale = store.staleWorking
-        let discover = Date().timeIntervalSince(lastDiscovery) > 30
-        if discover { lastDiscovery = Date() }
-        let tried = triedPIDs
-        let usedTranscripts = Set(store.sessions.compactMap(\.transcriptPath))
-
-        Task.detached(priority: .utility) {
-            let live = ProcessWatcher.running()
-            var restored: [(LiveClaude, URL, TranscriptSnapshot)] = []
-            var newTried: [Int32] = []
-            if discover {
-                var used = usedTranscripts
-                for p in live where !known.contains(p.tty) && !tried.contains(p.pid) {
-                    newTried.append(p.pid)
-                    let full = ProcessWatcher.details(p)
-                    guard let cwd = full.cwd else { continue }
-                    let files = ProcessWatcher.transcripts(in: ProcessWatcher.projectDir(for: cwd))
-                    let byResume = full.resumeID.flatMap { id in files.first { $0.deletingPathExtension().lastPathComponent == id } }
-                    guard let url = byResume ?? files.first(where: { !used.contains($0.path) }) else { continue }
-                    used.insert(url.path)
-                    restored.append((full, url, ProcessWatcher.snapshot(path: url.path)))
-                }
-            }
-            let snapshots = stale.map { ($0.id, ProcessWatcher.snapshot(path: $0.path)) }
-            let found = restored
-            let checked = newTried
-            await MainActor.run {
-                self.store.removeDead(liveTTYs: Set(live.map(\.tty)))
-                for r in found { self.store.restore(process: r.0, transcript: r.1, snapshot: r.2) }
-                for (id, snap) in snapshots { self.store.apply(snapshot: snap, sessionID: id) }
-                self.triedPIDs.formUnion(checked)
-                self.watching = false
-            }
-        }
-    }
-
-    private func refreshUsage() {
-        guard !scanning else { return }
-        scanning = true
-        let scanner = scanner
-        Task.detached(priority: .utility) {
-            let summary = scanner.scan()
-            await MainActor.run {
-                self.store.usage = summary
-                self.scanning = false
-            }
-        }
-    }
-
     // MARK: - Hooks
 
-    private func installHooks(quiet: Bool = false) {
+    private func installHooks(quiet: Bool) {
         do {
             try HookInstaller.install()
             store.hooksInstalled = true
             if quiet { return } // окно приветствия само показывает «Подключено»
-            alert(L("Hooks connected", "Hooks подключены"),
-                  L("Peppap was added to ~/.claude/settings.json (backup: settings.json.peppap-backup). "
-                    + "Running Claude Code sessions pick up the change after a restart.",
-                    "Peppap прописан в ~/.claude/settings.json (резервная копия: settings.json.peppap-backup). "
-                    + "Уже открытые сессии Claude Code подхватят изменения после перезапуска."))
+            showAlert(L("Hooks connected", "Hooks подключены"),
+                      L("Peppap was added to ~/.claude/settings.json (backup: settings.json.peppap-backup). "
+                        + "Running Claude Code sessions pick up the change after a restart.",
+                        "Peppap прописан в ~/.claude/settings.json (резервная копия: settings.json.peppap-backup). "
+                        + "Уже открытые сессии Claude Code подхватят изменения после перезапуска."))
         } catch {
-            alert(L("Couldn't connect the hooks", "Не удалось подключить hooks"), error.localizedDescription)
+            showAlert(L("Couldn't connect the hooks", "Не удалось подключить hooks"), error.localizedDescription)
         }
     }
 
-    private func uninstallHooks() {
+    // MARK: - Демо
+
+    private func startDemo(record: Bool, language: AppLanguage? = nil) {
+        demo.start(record: record, language: language) { url in
+            if let url { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+        }
+    }
+}
+
+// MARK: - Команды меню
+
+extension AppDelegate: StatusMenuDelegate {
+    func offerUpdate() { updatePrompt.offerAvailable() }
+    func toggleNotch() { notch.toggleFromHotKey() }
+    func installHooks() { installHooks(quiet: false) }
+
+    func uninstallHooks() {
         do {
             try HookInstaller.uninstall()
             store.hooksInstalled = false
         } catch {
-            alert(L("Couldn't remove the hooks", "Не удалось удалить hooks"), error.localizedDescription)
+            showAlert(L("Couldn't remove the hooks", "Не удалось удалить hooks"), error.localizedDescription)
         }
     }
 
-    // MARK: - Меню в строке меню
-
-    private func setupStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "sparkle", accessibilityDescription: "Peppap")
-        let menu = NSMenu()
-        menu.delegate = self
-        statusItem.menu = menu
+    func openSettings() {
+        settings.show(SettingsView(
+            store: store,
+            gitlab: gitlab,
+            gitlabServer: gitlabServer,
+            onInstallHooks: { [weak self] in self?.installHooks() },
+            onUninstallHooks: { [weak self] in self?.uninstallHooks() },
+            onHotKeyChange: { [weak self] preset in self?.hotKey?.set(preset) },
+            onCheckUpdates: { [weak self] in self?.updatePrompt.checkManually() }
+        ))
     }
 
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        menu.removeAllItems()
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
-        menu.addItem(withTitle: "Peppap \(version)", action: nil, keyEquivalent: "")
-        if let release = updater.available {
-            add(menu, L("Update to \(release.version)…", "Обновить до \(release.version)…"), #selector(menuUpdate))
-        }
-        let n = store.sessions.count
-        menu.addItem(withTitle: "Claude Code: " + (n == 0 ? L("no sessions", "нет сессий") : Fmt.sessions(n)), action: nil, keyEquivalent: "")
-        if gitlab.isConfigured {
-            let s = gitlab.snapshot
-            menu.addItem(withTitle: "GitLab: " + (s.map { L("\($0.authored.count) MR · \($0.review.count) to review", "\($0.authored.count) MR · \($0.review.count) на ревью") }
-                                                  ?? gitlab.error ?? L("loading…", "загрузка…")),
-                         action: nil, keyEquivalent: "")
-        }
-        if Prefs.hotkey != .off {
-            add(menu, L("Open the notch", "Открыть челку") + " (\(Prefs.hotkey.title))", #selector(menuOpenNotch))
-        }
-        menu.addItem(.separator())
-
-        let installed = HookInstaller.isInstalled
-        store.hooksInstalled = installed
-        add(menu, installed ? L("Disconnect Claude Code hooks", "Отключить hooks Claude Code") : L("Connect Claude Code hooks", "Подключить hooks Claude Code"),
-            installed ? #selector(menuUninstallHooks) : #selector(menuInstallHooks))
-        add(menu, L("Notification sound", "Звук уведомлений"), #selector(toggleSound), on: Prefs.sound)
-        add(menu, L("Settings…", "Настройки…"), #selector(openSettings), key: ",")
-        add(menu, L("Welcome…", "Приветствие…"), #selector(showOnboarding))
-        menu.addItem(.separator())
-        add(menu, L("Export weekly report…", "Экспорт отчёта за неделю…"), #selector(exportReport))
-        add(menu, L("Play demo", "Показать демо"), #selector(runDemo))
-        add(menu, L("Record demo video…", "Записать демо-ролик…"), #selector(recordDemo))
-        add(menu, L("Refresh stats", "Обновить статистику"), #selector(menuRefresh))
-        menu.addItem(.separator())
-        add(menu, L("Quit", "Выйти"), #selector(quit), key: "q")
-    }
-
-    private func add(_ menu: NSMenu, _ title: String, _ action: Selector, on: Bool? = nil, key: String = "") {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
-        item.target = self
-        if let on { item.state = on ? .on : .off }
-        menu.addItem(item)
-    }
-
-    @objc private func menuInstallHooks() { installHooks() }
-    @objc private func menuUninstallHooks() { uninstallHooks() }
-    @objc private func toggleSound() { UserDefaults.standard.set(!Prefs.sound, forKey: Prefs.Key.sound) }
-    @objc private func menuRefresh() { refreshUsage() }
-    @objc private func menuOpenNotch() { notch.toggleFromHotKey() }
-    @objc private func quit() { NSApp.terminate(nil) }
-
-    // MARK: - Обновления
-
-    @objc private func menuUpdate() {
-        if let release = updater.available { offerUpdate(release) }
-    }
-
-    private func checkForUpdatesManually() {
-        Task {
-            if let release = await updater.check(manual: true) {
-                offerUpdate(release)
-            } else {
-                alert(L("You're up to date", "Обновлений нет"),
-                      L("Peppap \(Updater.currentVersion) is the latest version.", "Peppap \(Updater.currentVersion) — последняя версия."))
-            }
-        }
-    }
-
-    private func offerUpdate(_ release: Updater.Release) {
-        notch.collapse()
-        NSApp.activate()
-        let a = NSAlert()
-        a.messageText = L("Peppap \(release.version) is available", "Доступна версия Peppap \(release.version)")
-        let notes = release.notes.count > 700 ? String(release.notes.prefix(700)) + "…" : release.notes
-        a.informativeText = L("You have \(Updater.currentVersion).", "Установлена \(Updater.currentVersion).") + "\n\n" + notes
-        a.addButton(withTitle: L("Install and Relaunch", "Установить и перезапустить"))
-        a.addButton(withTitle: L("Later", "Позже"))
-        a.addButton(withTitle: L("Release Page", "Страница релиза"))
-        a.addButton(withTitle: L("Skip This Version", "Пропустить версию"))
-        switch a.runModal() {
-        case .alertFirstButtonReturn: install(release)
-        case .alertThirdButtonReturn: NSWorkspace.shared.open(release.pageURL)
-        case NSApplication.ModalResponse(rawValue: NSApplication.ModalResponse.alertThirdButtonReturn.rawValue + 1):
-            updater.skip(release)
-        default: break
-        }
-    }
-
-    private func installAvailableUpdate() {
-        guard let release = updater.available else { return }
-        install(release)
-    }
-
-    private func install(_ release: Updater.Release) {
-        Task {
-            do {
-                try await updater.install(release)
-            } catch {
-                NSApp.activate()
-                let a = NSAlert()
-                a.messageText = L("Couldn't install the update", "Не удалось установить обновление")
-                a.informativeText = error.localizedDescription
-                a.addButton(withTitle: L("Open Release Page", "Открыть страницу релиза"))
-                a.addButton(withTitle: L("Cancel", "Отмена"))
-                if a.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(release.pageURL) }
-            }
-        }
-    }
-
-    @objc private func showOnboarding() {
+    func showOnboarding() {
         onboarding.show(OnboardingView(
             store: store,
             onInstallHooks: { [weak self] in self?.installHooks(quiet: true) },
             onOpenSettings: { [weak self] in self?.openSettings() },
-            onPlayDemo: { [weak self] in self?.startDemo(record: false) },
+            onPlayDemo: { [weak self] in self?.playDemo() },
             onDone: { [weak self] in self?.onboarding.close() }
         ))
     }
 
-    @objc private func openSettings() {
-        settings.show(SettingsView(
-            store: store,
-            gitlab: gitlab,
-            onInstallHooks: { [weak self] in self?.installHooks() },
-            onUninstallHooks: { [weak self] in self?.uninstallHooks() },
-            onHotKeyChange: { [weak self] preset in self?.hotKey?.set(preset) },
-            onCheckUpdates: { [weak self] in self?.checkForUpdatesManually() }
-        ))
-    }
-
-    @objc private func recordDemo() {
-        if !CGPreflightScreenCaptureAccess() {
-            CGRequestScreenCaptureAccess()
-            alert(L("Screen recording permission needed", "Нужно разрешение на запись экрана"),
-                  L("Enable Peppap in System Settings → Privacy & Security → Screen Recording, then restart Peppap.",
-                    "Включите Peppap в «Системные настройки → Конфиденциальность и безопасность → Запись экрана», затем перезапустите Peppap."))
-            return
-        }
-        startDemo(record: true)
-    }
-
-    private func startDemo(record: Bool, language: AppLanguage? = nil) {
-        let defaults = UserDefaults.standard
-        let previous = defaults.string(forKey: L10n.key)
-        if let language { defaults.set(language.rawValue, forKey: L10n.key) }
-        demo.start(record: record) { url in
-            if language != nil { defaults.set(previous, forKey: L10n.key) }
-            if let url { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-        }
-    }
-
-    @objc private func exportReport() {
+    func exportReport() {
         let md = Report.week(records: store.history, days: store.week)
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "claude-week-\(DayStats.key()).md"
@@ -426,18 +210,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             try md.write(to: url, atomically: true, encoding: .utf8)
             NSWorkspace.shared.activateFileViewerSelecting([url])
         } catch {
-            alert(L("Couldn't save the report", "Не удалось сохранить отчёт"), error.localizedDescription)
+            showAlert(L("Couldn't save the report", "Не удалось сохранить отчёт"), error.localizedDescription)
         }
     }
 
     /// Проигрывает демо-сценарий без записи.
-    @objc private func runDemo() { startDemo(record: false) }
+    func playDemo() { startDemo(record: false) }
 
-    private func alert(_ title: String, _ text: String) {
-        NSApp.activate()
-        let a = NSAlert()
-        a.messageText = title
-        a.informativeText = text
-        a.runModal()
+    func recordDemo() {
+        if !CGPreflightScreenCaptureAccess() {
+            CGRequestScreenCaptureAccess()
+            showAlert(L("Screen recording permission needed", "Нужно разрешение на запись экрана"),
+                      L("Enable Peppap in System Settings → Privacy & Security → Screen Recording, then restart Peppap.",
+                        "Включите Peppap в «Системные настройки → Конфиденциальность и безопасность → Запись экрана», затем перезапустите Peppap."))
+            return
+        }
+        startDemo(record: true)
     }
+
+    func refreshStats() { monitor.refreshUsage() }
 }

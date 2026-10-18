@@ -21,20 +21,14 @@ final class GitLabStore: ObservableObject {
     @Published private(set) var canAct: Bool?
     /// MR, с которыми только что что-то сделали: их изменения — не повод для уведомления.
     private var acted: Set<String> = []
-    /// Демо-ролик: выдуманный список, без сети; действия только изображаются.
-    private(set) var demoActive = false
 
-    private(set) var token: String
+    let source: GitLabSource
     private var timer: Timer?
     private var generation = 0
 
-    init(token: String? = nil) {
-        self.token = token ?? Keychain.read(GitLab.tokenAccount) ?? ""
-        isConfigured = Self.configured(token: self.token)
-    }
-
-    private static func configured(token: String) -> Bool {
-        Prefs.gitlabEnabled && Prefs.gitlabHostURL != nil && !token.isEmpty
+    init(source: GitLabSource) {
+        self.source = source
+        isConfigured = source.isConfigured
     }
 
     func start() {
@@ -43,14 +37,6 @@ final class GitLabStore: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshIfStale(maxAge: Prefs.gitlabInterval) }
         }
-    }
-
-    func setToken(_ value: String) {
-        let t = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard t != token else { return }
-        token = t
-        Keychain.write(t, account: GitLab.tokenAccount)
-        configurationChanged()
     }
 
     /// Хост, токен или переключатель изменились: старый список больше не актуален.
@@ -65,7 +51,7 @@ final class GitLabStore: ObservableObject {
         acted = []
         lastUpdate = nil
         loading = false
-        isConfigured = Self.configured(token: token)
+        isConfigured = source.isConfigured
     }
 
     func refreshIfStale(maxAge: TimeInterval) {
@@ -74,14 +60,13 @@ final class GitLabStore: ObservableObject {
     }
 
     func refresh() {
-        guard isConfigured, !loading, !demoActive, let host = Prefs.gitlabHostURL else { return }
+        guard isConfigured, !loading else { return }
         loading = true
         let gen = generation
-        let token = token
-        if canAct == nil { checkScopes(host: host, token: token, generation: gen) }
+        if canAct == nil { checkScopes(generation: gen) }
         Task {
             let result: Result<GitLab.Snapshot, Error>
-            do { result = .success(try await GitLab.fetch(host: host, token: token)) } catch { result = .failure(error) }
+            do { result = .success(try await source.fetch()) } catch { result = .failure(error) }
             guard gen == generation else { return } // настройки сменились, пока шёл запрос
             loading = false
             lastUpdate = Date()
@@ -116,15 +101,13 @@ final class GitLabStore: ObservableObject {
     }
 
     func perform(_ action: MergeRequestAction, on mr: MergeRequest) {
-        if demoActive { return performInDemo(action, on: mr) }
-        guard running[mr.id] == nil, let host = Prefs.gitlabHostURL else { return }
+        guard isConfigured, running[mr.id] == nil else { return }
         running[mr.id] = action
         actionErrors[mr.id] = nil
         let gen = generation
-        let token = token
         Task {
             var failure: Error?
-            do { try await GitLab.perform(action, on: mr, host: host, token: token) } catch { failure = error }
+            do { try await source.perform(action, on: mr) } catch { failure = error }
             guard gen == generation else { return }
             running[mr.id] = nil
             if let failure {
@@ -137,41 +120,6 @@ final class GitLabStore: ObservableObject {
             // GitLab применяет часть изменений асинхронно (merge, rebase, пайплайн) — перечитываем чуть позже.
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.refresh() }
         }
-    }
-
-    private func performInDemo(_ action: MergeRequestAction, on mr: MergeRequest) {
-        running[mr.id] = action
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
-            guard let self, self.demoActive else { return }
-            self.running[mr.id] = nil
-            self.update(mr.id) { action.applied(to: $0, me: self.snapshot?.username ?? "") }
-        }
-    }
-
-    // MARK: - Демо
-
-    /// Показать выдуманный список (сценарий демо). Настоящие данные возвращает endDemo().
-    func beginDemo(_ s: GitLab.Snapshot) {
-        configurationChanged()
-        demoActive = true
-        isConfigured = true
-        canAct = true
-        apply(s)
-        lastUpdate = Date()
-    }
-
-    /// Следующее «обновление» в демо: события и индикатор — как от настоящего GitLab.
-    func demoApply(_ s: GitLab.Snapshot) {
-        guard demoActive else { return }
-        apply(s)
-        lastUpdate = Date()
-    }
-
-    func endDemo() {
-        guard demoActive else { return }
-        demoActive = false
-        configurationChanged()
-        refresh()
     }
 
     private func update(_ id: String, _ change: (MergeRequest) -> MergeRequest?) {
@@ -188,9 +136,9 @@ final class GitLabStore: ObservableObject {
         }
     }
 
-    private func checkScopes(host: URL, token: String, generation gen: Int) {
+    private func checkScopes(generation gen: Int) {
         Task {
-            let scopes = await GitLab.tokenScopes(host: host, token: token)
+            let scopes = await source.tokenScopes()
             guard gen == generation else { return }
             // Не удалось узнать — показываем действия, ошибку покажет само действие.
             canAct = scopes.map { $0.contains("api") } ?? true

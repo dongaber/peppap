@@ -11,3 +11,14 @@ enum Ink {
     static let fill = Color.white.opacity(0.06)
     static let line = Color.white.opacity(0.08)
 }
+
+extension Phase {
+    var color: Color {
+        switch self {
+        case .idle, .waiting: return .white.opacity(0.45)
+        case .done: return .green
+        case .working: return .claude
+        case .permission: return .yellow
+        }
+    }
+}

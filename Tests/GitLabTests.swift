@@ -90,7 +90,7 @@ let gitlabEventTests: [(String, @MainActor () throws -> Void)] = [
         expect(GitLab.events(from: s, to: s).isEmpty)
     }),
     ("индикатор: первая загрузка тихая, закрытые MR пропадают", {
-        let store = GitLabStore(token: "") // без обращения к связке ключей
+        let store = GitLabStore(source: GitLabServer(token: "")) // без обращения к связке ключей
         var received: [GitLab.Event] = []
         store.onEvents = { received += $0 }
         store.apply(try snapshot(authored: [mrNode("1", extra: ["detailedMergeStatus": "NOT_APPROVED"])]))

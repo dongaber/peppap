@@ -112,13 +112,13 @@ Sources live in `Sources/Peppap/`, grouped by area:
 
 | Folder | Purpose |
 |---|---|
-| `App/` | entry point, app delegate and menu bar menu, defaults (`Prefs`), English and Russian strings (`L10n`), global hotkey |
-| `Claude/` | Claude Code sessions: hook and status line scripts (`HookInstaller`), local HTTP server for hook events (`EventServer`), hook event parsing, session state and permissions (`SessionStore`), running `claude` processes and transcripts, tokens and cost (`UsageScanner`), change preview, task history and weekly report |
-| `GitLab/` | merge requests: model, actions, API client and GraphQL parser, `GitLabStore` |
+| `App/` | entry point, app delegate, menu bar menu (`StatusMenu`), debug commands of the local server, defaults (`Prefs`), English and Russian strings (`L10n`), global hotkey |
+| `Claude/` | Claude Code sessions: hook and status line scripts (`HookInstaller`), local HTTP server for hook events (`EventServer`), hook event parsing, session state and permissions (`SessionStore`), running `claude` processes and transcripts, tokens and cost (`ClaudeMonitor`, `UsageScanner`), change preview, task history and weekly report |
+| `GitLab/` | merge requests: model, actions, API client and GraphQL parser, `GitLabStore` on top of a `GitLabSource` (the server from the settings or demo data) |
 | `Notch/` | the notch panel (`NotchController`: hover, auto-expand, keyboard) and its SwiftUI interface: `Sessions/`, `Stats/` (today and week), `MergeRequests/`, shared `Components/` |
-| `Windows/` | settings and welcome windows |
+| `Windows/` | settings, welcome and update windows |
 | `System/` | Keychain, do-not-disturb (calls, full screen), jumping to a terminal or editor, self-update |
-| `Demo/` | demo recording for the README |
+| `Demo/` | demo recording for the README: a scripted run on its own in-memory stores |
 | `Support/` | formatting and string helpers |
 
 Tests are in `Tests/`, one file per area. `scripts/make-icon.swift` generates the app icon.
