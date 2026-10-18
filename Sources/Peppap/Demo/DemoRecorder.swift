@@ -138,6 +138,7 @@ final class DemoRecorder {
         store = SessionStore(history: records, usage: usage,
                              fiveHour: StatusInfo.Limit(percent: 42, resetsAt: now.addingTimeInterval(2 * 3600 + 900)),
                              sevenDay: StatusInfo.Limit(percent: 18, resetsAt: now.addingTimeInterval(4 * 86400)))
+        store.hooksInstalled = true // без баннера «Подключите hooks»
         gitlabSource = DemoGitLab(Self.gitlabSnapshot(later: false))
         gitlab = GitLabStore(source: gitlabSource)
         gitlab.refresh()
