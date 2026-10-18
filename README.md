@@ -52,20 +52,9 @@ The expanded notch has a source switch next to the notch (Claude · GitLab) and 
 
 ## Installation
 
-With [Homebrew](https://brew.sh):
+Download `Peppap-<version>.dmg` from [Releases](../../releases) and drag Peppap to Applications. Peppap updates itself after that (✦ menu → Update…).
 
-```sh
-brew install --cask dongaber/peppap/peppap
-```
-
-Peppap updates itself after that (✦ menu → Update…), and `brew upgrade` works too.
-
-> Installed with Homebrew before 0.6.0? The cask moved to [dongaber/homebrew-peppap](https://github.com/dongaber/homebrew-peppap). Point the tap there once:
-> `brew tap --custom-remote dongaber/peppap https://github.com/dongaber/homebrew-peppap`
-
-Or download `Peppap-<version>.dmg` from [Releases](../../releases) and drag Peppap to Applications.
-
-The app is not notarized by Apple, so macOS blocks a downloaded copy on first launch (Homebrew and in-app updates handle this for you). Remove the quarantine flag:
+The app is not notarized by Apple, so macOS blocks a downloaded copy on first launch (in-app updates handle this for you). Remove the quarantine flag:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/Peppap.app
