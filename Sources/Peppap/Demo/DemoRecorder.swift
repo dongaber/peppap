@@ -162,6 +162,7 @@ final class DemoRecorder {
         // GitHub в демо не подключён: пустой токен — без обращения к связке ключей.
         forges = Forges(gitlab: MergeRequestStore(source: gitlabSource), github: MergeRequestStore(source: DemoForge(Self.githubSnapshot, forge: .github)))
         gitlab.refresh()
+        github.refresh()
     }
 
     /// Выдуманные merge requests. `later` — следующее «обновление»: пайплайн прошёл, позвали на ревью.
