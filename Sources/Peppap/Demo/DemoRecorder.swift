@@ -21,6 +21,15 @@ final class DemoRecorder {
         self.notch = notch
     }
 
+    /// Запись ролика есть только в сборке для разработки (`DEV=1 ./build.sh`).
+    static var canRecord: Bool {
+        #if DEV
+        return true
+        #else
+        return false
+        #endif
+    }
+
     static var outputURL: URL {
         let dir = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0].appendingPathComponent("Peppap")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -29,8 +38,10 @@ final class DemoRecorder {
 
     /// Запуск записи. `record: false` — только проиграть сценарий (посмотреть без записи).
     /// `language` — записать на другом языке; прежняя настройка вернётся после записи.
+    /// Записывает только сборка для разработки (DEV): в релизе сценарий лишь проигрывается.
     func start(record: Bool, language: AppLanguage? = nil, completion: @escaping (URL?) -> Void) {
         guard !isRunning else { return }
+        let record = record && Self.canRecord
         if record && !CGPreflightScreenCaptureAccess() {
             CGRequestScreenCaptureAccess()
             completion(nil)

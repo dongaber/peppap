@@ -95,7 +95,7 @@ The hook sends event JSON to `127.0.0.1:47821`. If Peppap isn't running, `curl` 
 
 Events go to `127.0.0.1:47821/event/codex`; as with Claude, Codex is unaffected if Peppap isn't running.
 
-The ✦ menu also has: sound toggle, settings, weekly report export (per agent), demo, demo recording, and disconnecting the hooks (for Claude, this restores your previous status line).
+The ✦ menu also has: sound toggle, settings, weekly report export (per agent), demo, and disconnecting the hooks (for Claude, this restores your previous status line).
 
 ### GitLab
 
@@ -114,6 +114,7 @@ The ✦ menu also has: sound toggle, settings, weekly report export (per agent),
 ```sh
 ./build.sh                         # for the current CPU
 ARCHS="arm64 x86_64" ./build.sh    # universal build, as in CI
+DEV=1 ./build.sh                   # development build: demo recording and debug commands of the local server
 scripts/package.sh                 # dist/Peppap-<version>.zip and .dmg
 open build/Peppap.app
 ```
@@ -122,7 +123,7 @@ Only the Command Line Tools are needed (Xcode is optional). Run the tests with `
 
 Run `scripts/setup-signing.sh` once. It creates a local signing certificate in a separate keychain, so macOS permissions (such as controlling the terminal) survive rebuilds.
 
-Peppap records its own README demo with made-up sessions and merge requests: ✦ menu → Record demo video…. This needs the Screen Recording permission. To record in English regardless of the interface language, run `curl -H "X-Peppap-Token: $(cat ~/.peppap/token)" "http://127.0.0.1:47821/demo-record?lang=en"` instead. Then build the GIF, the MP4 and the screenshots from the recording:
+Peppap records its own README demo with made-up sessions and merge requests. Recording is a development tool and is not in release builds: build with `DEV=1 ./build.sh`, then use ✦ menu → Record demo video…. This needs the Screen Recording permission. To record in English regardless of the interface language, run `curl -H "X-Peppap-Token: $(cat ~/.peppap/token)" "http://127.0.0.1:47821/demo-record?lang=en"` instead. Then build the GIF, the MP4 and the screenshots from the recording:
 
 ```sh
 . scripts/lib.sh && swiftc -sdk "$(pick_sdk)" scripts/make-demo-media.swift -o /tmp/make-demo-media
