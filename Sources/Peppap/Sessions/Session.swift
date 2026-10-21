@@ -57,7 +57,7 @@ struct SessionMetrics: Sendable {
 }
 
 /// Сессия агента в терминале (Claude Code или Codex).
-struct ClaudeSession: Identifiable {
+struct AgentSession: Identifiable {
     let id: String
     var cwd: String
     var agent = Agent.claude

@@ -27,10 +27,10 @@ struct NotchShape: Shape {
 
 /// Действия, которые интерфейс челки просит выполнить приложение.
 struct NotchActions {
-    var select: (ClaudeSession) -> Void
+    var select: (AgentSession) -> Void
     var installHooks: (Agent) -> Void
-    var rename: (ClaudeSession) -> Void
-    var send: (ClaudeSession, String) -> Void
+    var rename: (AgentSession) -> Void
+    var send: (AgentSession, String) -> Void
     var installUpdate: () -> Void
     var openMergeRequest: (MergeRequest) -> Void
 }

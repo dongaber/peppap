@@ -44,7 +44,7 @@ final class AgentMonitor {
 
         Task.detached(priority: .utility) {
             let live = ProcessWatcher.running(agent)
-            var restored: [(LiveClaude, URL, TranscriptSnapshot)] = []
+            var restored: [(LiveAgent, URL, TranscriptSnapshot)] = []
             var newTried: [Int32] = []
             if discover {
                 var used = usedTranscripts

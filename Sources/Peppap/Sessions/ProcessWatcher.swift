@@ -1,7 +1,7 @@
 import Foundation
 
 /// Запущенный процесс Claude Code или Codex.
-struct LiveClaude: Sendable {
+struct LiveAgent: Sendable {
     let pid: Int32
     let tty: String
     let args: String
@@ -30,19 +30,19 @@ struct TranscriptSnapshot: Sendable {
 /// Процессы `claude` и `codex`: какие сессии живы, где они запущены.
 enum ProcessWatcher {
     /// Список процессов агента в терминалах (быстро: один вызов ps).
-    static func running(_ agent: Agent = .claude) -> [LiveClaude] {
+    static func running(_ agent: Agent = .claude) -> [LiveAgent] {
         let name = agent == .claude ? "claude" : "codex"
         return run("/bin/ps", ["-axo", "pid=,tty=,comm=,args="]).split(separator: "\n").compactMap { line in
             let cols = line.split(separator: " ", maxSplits: 3, omittingEmptySubsequences: true).map(String.init)
             guard cols.count >= 3, let pid = Int32(cols[0]) else { return nil }
             let comm = cols[2]
             guard comm == name || comm.hasSuffix("/" + name), cols[1] != "??" else { return nil }
-            return LiveClaude(pid: pid, tty: cols[1], args: cols.count > 3 ? cols[3] : "")
+            return LiveAgent(pid: pid, tty: cols[1], args: cols.count > 3 ? cols[3] : "")
         }
     }
 
     /// Дополняет процесс рабочей папкой и терминалом (дороже: lsof и ps -E).
-    static func details(_ p: LiveClaude) -> LiveClaude {
+    static func details(_ p: LiveAgent) -> LiveAgent {
         var p = p
         let cwdLine = run("/usr/sbin/lsof", ["-a", "-p", "\(p.pid)", "-d", "cwd", "-Fn"])
             .split(separator: "\n").first { $0.hasPrefix("n") }

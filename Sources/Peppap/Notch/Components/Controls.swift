@@ -66,7 +66,7 @@ struct ContextChip: View {
 }
 
 struct TimeLabel: View {
-    let session: ClaudeSession
+    let session: AgentSession
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in

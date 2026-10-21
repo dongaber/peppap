@@ -7,7 +7,7 @@ enum PermissionAnswer {
 
 @MainActor
 final class SessionStore: ObservableObject {
-    @Published private(set) var sessions: [ClaudeSession] = []
+    @Published private(set) var sessions: [AgentSession] = []
     @Published private(set) var today: DayStats
     @Published private(set) var history: [TaskRecord]
     @Published var usage: UsageSummary?
@@ -16,7 +16,7 @@ final class SessionStore: ObservableObject {
     @Published var hooksInstalled = false
 
     /// Сессии нужно внимание пользователя (готово / ждёт разрешения).
-    var onAttention: ((ClaudeSession) -> Void)?
+    var onAttention: ((AgentSession) -> Void)?
     /// Ответ hook-скрипту, ждущему решения (nil — спросить в терминале).
     var onPermissionReply: ((String, Data?) -> Void)?
 
@@ -45,7 +45,7 @@ final class SessionStore: ObservableObject {
         limits = (fiveHour, sevenDay, Date())
     }
 
-    var visibleSessions: [ClaudeSession] { sessions.filter { !$0.hidden } }
+    var visibleSessions: [AgentSession] { sessions.filter { !$0.hidden } }
     var topPhase: Phase { visibleSessions.map(\.phase).max() ?? .idle }
     var hasActivity: Bool { topPhase.isActive }
 
@@ -75,7 +75,7 @@ final class SessionStore: ObservableObject {
             return
         }
 
-        var s = sessions.first { $0.id == e.sessionID } ?? ClaudeSession(id: e.sessionID, cwd: e.cwd, agent: agent)
+        var s = sessions.first { $0.id == e.sessionID } ?? AgentSession(id: e.sessionID, cwd: e.cwd, agent: agent)
         // В одном терминале работает один агент: новая сессия там (/clear, перезапуск) заменяет старую.
         if let tty = e.tty, tty != "??" {
             for var other in sessions where other.id != e.sessionID && other.tty == tty {
@@ -253,7 +253,7 @@ final class SessionStore: ObservableObject {
     }
 
     /// Отпускает ждущий hook без решения (если он ещё ждёт) и убирает карточку.
-    private func releasePermission(_ s: inout ClaudeSession) {
+    private func releasePermission(_ s: inout AgentSession) {
         guard let p = s.pending else { return }
         permissionTimers.removeValue(forKey: p.id)?.invalidate()
         onPermissionReply?(p.id, nil)
@@ -311,10 +311,10 @@ final class SessionStore: ObservableObject {
     }
 
     /// Восстанавливает сессию по живому процессу и её журналу (после перезапуска Peppap).
-    func restore(process p: LiveClaude, transcript: URL, snapshot snap: TranscriptSnapshot) {
+    func restore(process p: LiveAgent, transcript: URL, snapshot snap: TranscriptSnapshot) {
         let id = agent == .claude ? transcript.deletingPathExtension().lastPathComponent : CodexLog.sessionID(of: transcript)
         guard !sessions.contains(where: { $0.id == id || $0.tty == p.tty }), let cwd = p.cwd else { return }
-        var s = ClaudeSession(id: id, cwd: cwd, agent: agent)
+        var s = AgentSession(id: id, cwd: cwd, agent: agent)
         s.tty = p.tty
         s.hostBundleID = p.hostBundleID
         s.termProgram = p.termProgram
@@ -381,7 +381,7 @@ final class SessionStore: ObservableObject {
     }
 
     /// Прямое изменение сессии: то, чего нет в событиях hooks (демо задаёт так метрики).
-    func update(_ id: String, _ change: (inout ClaudeSession) -> Void) {
+    func update(_ id: String, _ change: (inout AgentSession) -> Void) {
         guard let i = sessions.firstIndex(where: { $0.id == id }) else { return }
         change(&sessions[i])
     }
@@ -428,7 +428,7 @@ final class SessionStore: ObservableObject {
         sort()
     }
 
-    private func recordTask(_ s: ClaudeSession, start: Date, duration: TimeInterval) {
+    private func recordTask(_ s: AgentSession, start: Date, duration: TimeInterval) {
         if today.day != DayStats.key() { today = DayStats.load(agent) }
         today.tasks += 1
         today.seconds += duration
@@ -468,7 +468,7 @@ final class SessionStore: ObservableObject {
         }
     }
 
-    private func upsert(_ s: ClaudeSession) {
+    private func upsert(_ s: AgentSession) {
         if let i = sessions.firstIndex(where: { $0.id == s.id }) {
             sessions[i] = s
         } else {

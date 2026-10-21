@@ -143,7 +143,7 @@ Sources live in `Sources/Peppap/`, grouped by area:
 |---|---|
 | `App/` | entry point, app delegate, menu bar menu (`StatusMenu`), debug commands of the local server, defaults (`Prefs`), English and Russian strings (`L10n`), global hotkey |
 | `Agent/` | `Agent` (Claude Code or Codex) and `Agents` with the session stores of both |
-| `Claude/` | agent sessions, shared by Claude and Codex: hook and status line scripts (`HookInstaller`), local HTTP server for hook events (`EventServer`), hook event parsing, session state and permissions (`SessionStore`, one per agent), running processes and transcripts, tokens and cost (`AgentMonitor`, `UsageScanner`), change preview, task history and weekly report |
+| `Sessions/` | agent sessions, shared by Claude and Codex: hook and status line scripts (`HookInstaller`), local HTTP server for hook events (`EventServer`), hook event parsing, session state and permissions (`SessionStore`, one per agent), running processes and transcripts, tokens and cost (`AgentMonitor`, `UsageScanner`), change preview, task history and weekly report |
 | `Codex/` | Codex specifics: `~/.codex/hooks.json` (`CodexHookInstaller`) and session logs: tokens, limits, the last turn (`CodexLog`) |
 | `Forge/` | what GitLab and GitHub share: the merge request model and actions, change events, `MergeRequestStore` on top of a `MergeRequestSource` (`ForgeServer` from the settings or demo data), `Forges` with both stores |
 | `GitLab/`, `GitHub/` | API clients and GraphQL parsers; GitHub states are mapped to the GitLab merge statuses the model uses |
