@@ -21,8 +21,9 @@ enum Agent: String, CaseIterable, Sendable {
         }
     }
 
-    /// Стоимость по ценам API считается только для Claude: у Codex в журнале есть токены, но не цены.
-    var hasCost: Bool { self == .claude }
+    /// Показывать ли оценку стоимости по ценам API. Для Codex — только если включено в настройках:
+    /// обычно он работает по подписке ChatGPT, и цены API для него условны.
+    var hasCost: Bool { self == .claude || Prefs.codexCost }
 
     var hooksInstalled: Bool {
         switch self {

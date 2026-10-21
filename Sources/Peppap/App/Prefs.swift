@@ -20,6 +20,7 @@ enum Prefs {
         static let haptics = "haptics"
         static let quickReplies = "quickReplies"
         static let language = L10n.key
+        static let codexCost = "codexCost"
 
         // У каждого сервиса свои настройки: gitlabEnabled, githubEnabled, …
         static func enabled(_ f: Forge) -> String { f.rawValue + "Enabled" }
@@ -98,5 +99,6 @@ enum Prefs {
         case .readyToMerge: return d.bool(forKey: Key.notifyReady(f))
         }
     }
+    static var codexCost: Bool { d.bool(forKey: Key.codexCost) }
     static var hotkey: HotKeyPreset { HotKeyPreset(rawValue: d.string(forKey: Key.hotkey) ?? "") ?? .ctrlOptC }
 }

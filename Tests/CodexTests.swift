@@ -192,3 +192,29 @@ let codexTests: [(String, @MainActor () throws -> Void)] = [
         expectEqual(agents.visibleSessions.count, 2)
     }),
 ]
+
+let codexCostTests: [(String, @MainActor () throws -> Void)] = [
+    ("стоимость по ценам OpenAI API", {
+        let line = jsonLine(["timestamp": isoNow(), "type": "event_msg", "payload": [
+            "type": "token_count", "info": [
+                "total_token_usage": ["total_tokens": 1_100_000],
+                "last_token_usage": ["input_tokens": 1_000_000, "cached_input_tokens": 800_000, "output_tokens": 100_000,
+                                     "total_tokens": 1_100_000]]]])
+        let text = jsonLine(["timestamp": isoNow(), "type": "turn_context", "payload": ["model": "gpt-5.5"]]) + "\n" + line + "\n"
+        // 200K некэшированных × $5 + 800K кэша × $0.50 + 100K выхода × $30 = 1 + 0.4 + 3
+        let cost = CodexLog.entries(in: text[...]).values.first?.cost ?? 0
+        expect(abs(cost - 4.4) < 0.0001, "стоимость \(cost)")
+        expectEqual(CodexLog.price(for: "gpt-5.1-codex-mini").output, 2)
+        expectEqual(CodexLog.price(for: "gpt-5.3-codex").input, 1.75)
+        expectEqual(CodexLog.price(for: "gpt-5-codex").input, 1.25)
+        expectEqual(CodexLog.price(for: "gpt-5.4-mini").input, 0.75)
+    }),
+    ("показ стоимости Codex — по настройке", {
+        let saved = UserDefaults.standard.object(forKey: Prefs.Key.codexCost)
+        defer { UserDefaults.standard.set(saved, forKey: Prefs.Key.codexCost) }
+        UserDefaults.standard.set(false, forKey: Prefs.Key.codexCost)
+        expect(Agent.claude.hasCost && !Agent.codex.hasCost)
+        UserDefaults.standard.set(true, forKey: Prefs.Key.codexCost)
+        expect(Agent.codex.hasCost)
+    }),
+]

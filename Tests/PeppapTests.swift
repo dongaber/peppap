@@ -23,6 +23,7 @@ enum PeppapTests {
             ("GitLab actions", gitlabActionTests),
             ("GitHub", githubTests),
             ("Codex", codexTests),
+            ("Codex cost", codexCostTests),
         ])
     }
 }
