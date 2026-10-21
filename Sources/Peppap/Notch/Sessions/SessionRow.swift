@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SessionRow: View {
-    let session: ClaudeSession
+    let session: AgentSession
     let selected: Bool
     let store: SessionStore
     let actions: NotchActions
@@ -126,7 +126,7 @@ private struct QuickReply: View {
 }
 
 private struct MetaLine: View {
-    let session: ClaudeSession
+    let session: AgentSession
 
     var body: some View {
         let parts = items

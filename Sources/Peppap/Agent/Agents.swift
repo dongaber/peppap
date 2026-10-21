@@ -28,5 +28,5 @@ final class Agents: ObservableObject {
     var hasActivity: Bool { all.contains { $0.hasActivity } }
     var topTodoProgress: Double? { top.topTodoProgress }
     var oldestRunningStart: Date? { all.compactMap(\.oldestRunningStart).min() }
-    var visibleSessions: [ClaudeSession] { all.flatMap(\.visibleSessions) }
+    var visibleSessions: [AgentSession] { all.flatMap(\.visibleSessions) }
 }

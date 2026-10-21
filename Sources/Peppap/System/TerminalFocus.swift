@@ -21,7 +21,7 @@ enum TerminalFocus {
         "WezTerm": "com.github.wez.wezterm",
     ]
 
-    static func focus(_ s: ClaudeSession) {
+    static func focus(_ s: AgentSession) {
         guard let bundle = s.hostBundleID ?? s.termProgram.flatMap({ termPrograms[$0] }) else { return }
 
         if let tty = s.tty, tty != "??" {
@@ -44,14 +44,14 @@ enum TerminalFocus {
     }
 
     /// Можно ли напечатать текст в терминал этой сессии (только Terminal и iTerm2 — по tty).
-    static func canSend(to s: ClaudeSession) -> Bool {
+    static func canSend(to s: AgentSession) -> Bool {
         guard let tty = s.tty, tty != "??" else { return false }
         let bundle = s.hostBundleID ?? s.termProgram.flatMap { termPrograms[$0] }
         return bundle == "com.apple.Terminal" || bundle == "com.googlecode.iterm2"
     }
 
     /// Печатает текст в сессию Claude Code и нажимает Return.
-    static func send(_ text: String, to s: ClaudeSession) {
+    static func send(_ text: String, to s: AgentSession) {
         guard canSend(to: s), let tty = s.tty else { return }
         let dev = tty.hasPrefix("/dev/") ? tty : "/dev/" + tty
         let escaped = text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")

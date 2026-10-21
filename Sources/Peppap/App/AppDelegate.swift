@@ -82,7 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - События
 
-    private func attention(_ s: ClaudeSession) {
+    private func attention(_ s: AgentSession) {
         if demo.isRunning { return } // сценарий демо сам управляет челкой и не шумит
         let quiet = Quiet.isQuiet
         if Prefs.sound && !quiet {
@@ -113,18 +113,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func select(_ s: ClaudeSession) {
+    private func select(_ s: AgentSession) {
         agents[s.agent].markSeen(s.id)
         notch.collapse()
         TerminalFocus.focus(s)
     }
 
-    private func send(_ text: String, to s: ClaudeSession) {
+    private func send(_ text: String, to s: AgentSession) {
         agents[s.agent].markSeen(s.id)
         TerminalFocus.send(text, to: s)
     }
 
-    private func rename(_ s: ClaudeSession) {
+    private func rename(_ s: AgentSession) {
         notch.collapse()
         NSApp.activate()
         let a = NSAlert()
