@@ -175,7 +175,7 @@ final class NotchController {
     }
 
     private var sessionsAgent: Agent {
-        agents.hasActivity ? agents.top.agent : agents.connected.first ?? .claude
+        agents.hasActivity ? agents.top.agent : agents.connected.first ?? agents.offered.first ?? .claude
     }
 
     /// Ненадолго раскрыть челку (событие в сессии, GitLab или GitHub).
@@ -267,7 +267,7 @@ final class NotchController {
             return true
         case 123, 124: // ← → — источники; в поле ввода стрелки двигают курсор
             if panel.firstResponder is NSTextView { return false }
-            let sources = NotchSource.visible(agents: agents.connected, forges: forges.configured)
+            let sources = NotchSource.visible(agents: agents.connected, forges: forges.configured, offered: agents.offered)
             let i = sources.firstIndex(of: ui.tab.source) ?? 0
             ui.select(sources[(i + (keyCode == 123 ? sources.count - 1 : 1)) % sources.count])
             return true

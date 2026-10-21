@@ -13,7 +13,7 @@ struct ExpandedView: View {
     /// Ширина «крыла» слева и справа от аппаратной челки: содержимое верхней строки не заходит под неё.
     private var wing: CGFloat { (Self.width(notch: ui.notchWidth) - 2 * Self.padding - ui.notchWidth - 12) / 2 }
 
-    private var sources: [NotchSource] { NotchSource.visible(agents: agents.connected, forges: forges.configured) }
+    private var sources: [NotchSource] { NotchSource.visible(agents: agents.connected, forges: forges.configured, offered: agents.offered) }
 
     /// Вкладка скрытого источника (агент без hooks, GitLab или GitHub без настроек) не показывается.
     private var tab: NotchTab {
@@ -100,10 +100,6 @@ struct ExpandedView: View {
     @ViewBuilder private func sessionsTab(_ store: SessionStore) -> some View {
         if !store.hooksInstalled {
             HooksBanner(agent: store.agent) { actions.installHooks(store.agent) }
-        }
-        // Пока не подключён ни один агент, на вкладке Claude предлагаем и Codex.
-        if agents.connected.isEmpty && store.agent == .claude {
-            HooksBanner(agent: .codex) { actions.installHooks(.codex) }
         }
         if let release = updater.available {
             UpdateBanner(version: release.version, installing: updater.installing, action: actions.installUpdate)

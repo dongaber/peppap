@@ -21,6 +21,8 @@ final class Agents: ObservableObject {
     var all: [SessionStore] { [claude, codex] }
     /// Агенты с подключёнными hooks.
     var connected: [Agent] { all.filter(\.hooksInstalled).map(\.agent) }
+    /// Установленные агенты (проверяются один раз при запуске): их предлагаем подключить, пока не подключён ни один.
+    let offered = Agent.offered
 
     /// Стор с самой важной сессией; при равенстве — Claude.
     var top: SessionStore { codex.topPhase > claude.topPhase ? codex : claude }

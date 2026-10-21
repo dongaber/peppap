@@ -29,13 +29,10 @@ struct OnboardingView: View {
                 .fixedSize()
             }
 
-            Step(number: 1, title: L("Connect Claude Code or Codex", "Подключите Claude Code или Codex"),
-                 text: L("Peppap adds a small hook to ~/.claude/settings.json (with a status line) or ~/.codex/hooks.json and keeps a backup. "
-                         + "Your own hooks and status line keep working. Codex runs new hooks only after you trust them: run /hooks in Codex once.",
-                         "Peppap добавит небольшой hook в ~/.claude/settings.json (со строкой состояния) или ~/.codex/hooks.json и сохранит резервную копию. "
-                         + "Ваши hooks и строка состояния продолжат работать. Новые hooks Codex запускает только после проверки: один раз выполните /hooks в Codex.")) {
+            Step(number: 1, title: L("Connect ", "Подключите ") + agents.offered.map(\.product).joined(separator: L(" or ", " или ")),
+                 text: connectText) {
                 VStack(alignment: .trailing, spacing: 6) {
-                    ForEach(Agent.allCases, id: \.self) { agent in
+                    ForEach(agents.offered, id: \.self) { agent in
                         if agents[agent].hooksInstalled {
                             Label(agent.product, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                         } else {
@@ -77,6 +74,22 @@ struct OnboardingView: View {
         }
         .padding(24)
         .frame(width: 560)
+    }
+}
+
+extension OnboardingView {
+    /// Что делает подключение — только про найденных агентов.
+    var connectText: String {
+        var parts: [String] = []
+        if agents.offered.contains(.claude) {
+            parts.append(L("For Claude Code, Peppap adds a small hook and a status line to ~/.claude/settings.json and keeps a backup; your own hooks and status line keep working.",
+                           "Для Claude Code Peppap добавит небольшой hook и строку состояния в ~/.claude/settings.json и сохранит резервную копию; ваши hooks и строка состояния продолжат работать."))
+        }
+        if agents.offered.contains(.codex) {
+            parts.append(L("For Codex, it adds hooks to ~/.codex/hooks.json; Codex runs them after you trust them once in /hooks.",
+                           "Для Codex — hooks в ~/.codex/hooks.json; Codex запустит их, когда вы один раз доверите их в /hooks."))
+        }
+        return parts.joined(separator: " ")
     }
 }
 
