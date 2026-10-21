@@ -34,8 +34,10 @@ enum HookInstaller {
     case "$input" in *'"hook_event_name":"PermissionRequest"'*) wait=590 ;; esac
     tty=$(ps -o tty= -p $$ 2>/dev/null | tr -d ' ')
     case "$tty" in ""|"??") tty=$(ps -o tty= -p $PPID 2>/dev/null | tr -d ' ');; esac
+    token=$(cat "$HOME/.peppap/token" 2>/dev/null)
     printf '%s' "$input" | curl -s -m "$wait" -X POST \\
       -H 'Content-Type: application/json' \\
+      -H "X-Peppap-Token: ${token}" \\
       -H "X-Peppap-Host: ${__CFBundleIdentifier:-}" \\
       -H "X-Peppap-Term: ${TERM_PROGRAM:-}" \\
       -H "X-Peppap-TTY: ${tty}" \\
@@ -51,11 +53,12 @@ enum HookInstaller {
     # Если раньше была своя строка состояния, печатает её; иначе — короткую строку от Peppap.
     input=$(cat)
     orig="$HOME/.peppap/statusline-original.sh"
+    token=$(cat "$HOME/.peppap/token" 2>/dev/null)
     if [ -x "$orig" ]; then
-      printf '%s' "$input" | curl -s -m 1 -o /dev/null -X POST --data-binary @- "http://127.0.0.1:\(EventServer.port)/status?quiet=1" >/dev/null 2>&1 &
+      printf '%s' "$input" | curl -s -m 1 -o /dev/null -X POST -H "X-Peppap-Token: ${token}" --data-binary @- "http://127.0.0.1:\(EventServer.port)/status?quiet=1" >/dev/null 2>&1 &
       printf '%s' "$input" | "$orig"
     else
-      printf '%s' "$input" | curl -s -m 1 -X POST --data-binary @- http://127.0.0.1:\(EventServer.port)/status 2>/dev/null
+      printf '%s' "$input" | curl -s -m 1 -X POST -H "X-Peppap-Token: ${token}" --data-binary @- http://127.0.0.1:\(EventServer.port)/status 2>/dev/null
     fi
 
     """

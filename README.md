@@ -86,7 +86,7 @@ Requires macOS 14 or later, Apple Silicon or Intel.
    Peppap adds its hooks and status line to `~/.claude/settings.json`. A backup is saved as `settings.json.peppap-backup`, and the scripts live in `~/.peppap/`.
 2. Restart running `claude` sessions if they don't pick up the change.
 
-The hook sends event JSON to `127.0.0.1:47821`. If Peppap isn't running, `curl` exits silently and Claude Code is unaffected.
+The hook sends event JSON to `127.0.0.1:47821`. If Peppap isn't running, `curl` exits silently and Claude Code is unaffected. The server only accepts requests that carry the secret from `~/.peppap/token` (readable only by you) and rejects anything a browser sends, so web pages and other users can't post fake events.
 
 ### Codex
 
@@ -122,7 +122,7 @@ Only the Command Line Tools are needed (Xcode is optional). Run the tests with `
 
 Run `scripts/setup-signing.sh` once. It creates a local signing certificate in a separate keychain, so macOS permissions (such as controlling the terminal) survive rebuilds.
 
-Peppap records its own README demo with made-up sessions and merge requests: ✦ menu → Record demo video…. This needs the Screen Recording permission. To record in English regardless of the interface language, run `curl "http://127.0.0.1:47821/demo-record?lang=en"` instead. Then build the GIF, the MP4 and the screenshots from the recording:
+Peppap records its own README demo with made-up sessions and merge requests: ✦ menu → Record demo video…. This needs the Screen Recording permission. To record in English regardless of the interface language, run `curl -H "X-Peppap-Token: $(cat ~/.peppap/token)" "http://127.0.0.1:47821/demo-record?lang=en"` instead. Then build the GIF, the MP4 and the screenshots from the recording:
 
 ```sh
 . scripts/lib.sh && swiftc -sdk "$(pick_sdk)" scripts/make-demo-media.swift -o /tmp/make-demo-media

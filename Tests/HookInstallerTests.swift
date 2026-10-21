@@ -52,3 +52,31 @@ let hookInstallerTests: [(String, @MainActor () throws -> Void)] = [
         }
     }),
 ]
+
+let serverTokenTests: [(String, @MainActor () throws -> Void)] = [
+    ("токен сервера: создаётся один раз, только для владельца", {
+        try withTempDir { home in
+            let saved = HookInstaller.home
+            HookInstaller.home = home
+            defer { HookInstaller.home = saved }
+            let token = ServerToken.loadOrCreate()
+            expectEqual(token.count, 64)
+            expectEqual(ServerToken.loadOrCreate(), token)
+            let perms = try FileManager.default.attributesOfItem(atPath: ServerToken.url.path)[.posixPermissions] as? Int
+            expectEqual(perms, 0o600)
+        }
+    }),
+    ("токен сервера: без токена, с чужим или из браузера — отказ", {
+        let token = String(repeating: "ab", count: 32)
+        expect(ServerToken.authorizes(["x-peppap-token": token], token: token))
+        expect(!ServerToken.authorizes([:], token: token))
+        expect(!ServerToken.authorizes(["x-peppap-token": String(repeating: "ac", count: 32)], token: token))
+        expect(!ServerToken.authorizes(["x-peppap-token": "ab"], token: token))
+        expect(!ServerToken.authorizes(["x-peppap-token": token, "origin": "https://evil.example"], token: token))
+    }),
+    ("скрипты шлют токен", {
+        expect(HookInstaller.script.contains("X-Peppap-Token: ${token}"))
+        expect(CodexHookInstaller.script.contains("X-Peppap-Token: ${token}"))
+        expectEqual(HookInstaller.statusScript.components(separatedBy: "X-Peppap-Token").count, 3)
+    }),
+]

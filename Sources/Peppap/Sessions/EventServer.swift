@@ -3,9 +3,11 @@ import Network
 
 /// Минимальный HTTP-сервер на 127.0.0.1: принимает POST /event (Claude Code) и /event/codex от hook-скриптов.
 /// Для PermissionRequest соединение остаётся открытым, пока не придёт решение (`reply`).
+/// Запросы без токена (`ServerToken`) отклоняются.
 final class EventServer: @unchecked Sendable {
     static let port: UInt16 = 47821
 
+    private let token: String
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "peppap.server")
     private var waiting: [String: NWConnection] = [:] // только на queue
@@ -17,8 +19,9 @@ final class EventServer: @unchecked Sendable {
     /// Отладочные команды: GET /demo-record, /demo-play (только localhost).
     var debugCommand: (@MainActor (String) -> String)?
 
-    init(onEvent: @escaping @MainActor (HookEvent) -> Void, onAbandoned: @escaping @MainActor (String) -> Void,
+    init(token: String, onEvent: @escaping @MainActor (HookEvent) -> Void, onAbandoned: @escaping @MainActor (String) -> Void,
          onStatus: @escaping @MainActor (StatusInfo) -> Void) {
+        self.token = token
         self.onEvent = onEvent
         self.onAbandoned = onAbandoned
         self.onStatus = onStatus
@@ -55,6 +58,10 @@ final class EventServer: @unchecked Sendable {
             if let data { buffer.append(data) }
 
             if let (path, headers, body) = Self.parse(buffer) {
+                guard ServerToken.authorizes(headers, token: self.token) else {
+                    Self.send(conn, body: nil, status: "403 Forbidden")
+                    return
+                }
                 if path.hasPrefix("/debug"), let debugState = self.debugState {
                     let text = DispatchQueue.main.sync { MainActor.assumeIsolated { debugState() } }
                     Self.send(conn, body: Data(text.utf8), contentType: "text/plain; charset=utf-8")
@@ -117,8 +124,8 @@ final class EventServer: @unchecked Sendable {
         }
     }
 
-    private static func send(_ conn: NWConnection, body: Data?, contentType: String = "application/json") {
-        var head = body == nil ? "HTTP/1.1 204 No Content\r\n" : "HTTP/1.1 200 OK\r\nContent-Type: \(contentType)\r\n"
+    private static func send(_ conn: NWConnection, body: Data?, contentType: String = "application/json", status: String? = nil) {
+        var head = body == nil ? "HTTP/1.1 \(status ?? "204 No Content")\r\n" : "HTTP/1.1 200 OK\r\nContent-Type: \(contentType)\r\n"
         head += "Content-Length: \(body?.count ?? 0)\r\nConnection: close\r\n\r\n"
         var data = Data(head.utf8)
         if let body { data.append(body) }
