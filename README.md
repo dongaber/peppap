@@ -128,8 +128,8 @@ Peppap records its own README demo with made-up sessions and merge requests. Rec
 
 ```sh
 . scripts/lib.sh && swiftc -sdk "$(pick_sdk)" scripts/make-demo-media.swift -o /tmp/make-demo-media
-/tmp/make-demo-media ~/Movies/Peppap/peppap-demo.mov docs 3 52 1840 10 \
-  permission@10 today@32 gitlab-review@50 gitlab-mine@54
+/tmp/make-demo-media ~/Movies/Peppap/peppap-demo.mov docs 3 67 1840 10 \
+  permission@10 today@32 gitlab-review@50 gitlab-mine@54 codex@61 github@67.5
 ```
 
 ## Contributing and releases
