@@ -29,4 +29,13 @@ final class Agents: ObservableObject {
     var topTodoProgress: Double? { top.topTodoProgress }
     var oldestRunningStart: Date? { all.compactMap(\.oldestRunningStart).min() }
     var visibleSessions: [AgentSession] { all.flatMap(\.visibleSessions) }
+
+    /// Сегодня по всем подключённым агентам. Стоимость — только если она считается для каждого из них,
+    /// иначе сумма вводила бы в заблуждение.
+    var today: (tasks: Int, seconds: TimeInterval, tokens: Int, cost: Double?) {
+        let stores = all.filter(\.hooksInstalled)
+        let cost = stores.allSatisfy(\.agent.hasCost) ? stores.reduce(0) { $0 + ($1.usage?.todayCost ?? 0) } : nil
+        return (stores.reduce(0) { $0 + $1.today.tasks }, stores.reduce(0) { $0 + $1.today.seconds },
+                stores.reduce(0) { $0 + ($1.usage?.todayTokens ?? 0) }, cost)
+    }
 }

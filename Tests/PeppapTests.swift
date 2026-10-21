@@ -24,6 +24,7 @@ enum PeppapTests {
             ("GitHub", githubTests),
             ("Codex", codexTests),
             ("Codex cost", codexCostTests),
+            ("Agents today", agentsTodayTests),
         ])
     }
 }
