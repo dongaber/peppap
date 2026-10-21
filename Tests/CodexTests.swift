@@ -218,3 +218,27 @@ let codexCostTests: [(String, @MainActor () throws -> Void)] = [
         expect(Agent.codex.hasCost)
     }),
 ]
+
+let agentsTodayTests: [(String, @MainActor () throws -> Void)] = [
+    ("сегодня по всем агентам", {
+        let saved = UserDefaults.standard.object(forKey: Prefs.Key.codexCost)
+        defer { UserDefaults.standard.set(saved, forKey: Prefs.Key.codexCost) }
+        UserDefaults.standard.set(false, forKey: Prefs.Key.codexCost)
+        let agents = Agents(claude: SessionStore(persistent: false), codex: SessionStore(agent: .codex, persistent: false))
+        agents.claude.hooksInstalled = true
+        agents.codex.hooksInstalled = true
+        for (store, n) in [(agents.claude, 1), (agents.codex, 2)] {
+            var usage = UsageSummary()
+            usage.todayTokens = 1000 * n
+            usage.todayCost = Double(n)
+            store.usage = usage
+            store.handle(hookEvent(["hook_event_name": "UserPromptSubmit", "session_id": "s\(n)", "cwd": "/p", "prompt": "x"])!)
+        }
+        expectEqual(agents.today.tokens, 3000)
+        expect(agents.today.cost == nil) // у Codex стоимость выключена — не складываем
+        UserDefaults.standard.set(true, forKey: Prefs.Key.codexCost)
+        expectEqual(agents.today.cost, 3)
+        agents.codex.hooksInstalled = false
+        expectEqual(agents.today.tokens, 1000) // неподключённый агент не считается
+    }),
+]

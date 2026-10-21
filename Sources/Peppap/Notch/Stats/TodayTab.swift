@@ -2,10 +2,12 @@ import SwiftUI
 
 struct TodayTab: View {
     @ObservedObject var store: SessionStore
+    @ObservedObject var agents: Agents
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             StatsFooter(today: store.today, usage: store.usage, limits: store.freshLimits, hasCost: store.agent.hasCost)
+            if agents.connected.count > 1 { TotalLine(agents: agents) }
             Rectangle().fill(Ink.line).frame(height: 1)
             let records = store.todayRecords
             if records.isEmpty {
@@ -74,6 +76,24 @@ private struct StatsFooter: View {
                 BlockBar(usage: u, hasCost: hasCost)
             }
         }
+    }
+}
+
+/// Сумма за сегодня по всем подключённым агентам.
+private struct TotalLine: View {
+    let agents: Agents
+
+    var body: some View {
+        let t = agents.today
+        var parts = [Fmt.tasks(t.tasks), Fmt.hours(t.seconds), Fmt.tokens(t.tokens)]
+        if let cost = t.cost { parts.append(Fmt.usd(cost)) }
+        return HStack(spacing: 6) {
+            Text(agents.connected.map(\.title).joined(separator: " + ") + L(" today", " сегодня")).foregroundStyle(Ink.secondary)
+            Text(parts.joined(separator: " · ")).foregroundStyle(Ink.primary.opacity(0.85))
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 11))
+        .lineLimit(1)
     }
 }
 

@@ -54,7 +54,7 @@ struct ExpandedView: View {
 
             switch tab {
             case .sessions(let a): sessionsTab(agents[a])
-            case .today(let a): TodayTab(store: agents[a])
+            case .today(let a): TodayTab(store: agents[a], agents: agents)
             case .week(let a): WeekTab(store: agents[a]).id(a) // у каждого агента свой выбор метрики
             case .mine(let f), .review(let f): MergeRequestsTab(store: forges[f], ui: ui, tab: tab, actions: actions)
             }
