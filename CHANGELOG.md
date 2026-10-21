@@ -3,6 +3,22 @@
 All notable changes to Peppap. Versions follow [SemVer](https://semver.org/); entries are generated from
 [Conventional Commits](https://www.conventionalcommits.org) by `bun run release`.
 
+## [1.1.0](https://github.com/dongaber/peppap/compare/v1.0.0...v1.1.0) (2026-10-21)
+
+### Added
+
+* offer only installed agents before any is connected ([#18](https://github.com/dongaber/peppap/issues/18)) ([675a654](https://github.com/dongaber/peppap/commit/675a6542a3ba7a8b6b4471efb3880ab62245bf30))
+* optionally estimate Codex cost at OpenAI API prices ([#16](https://github.com/dongaber/peppap/issues/16)) ([57a8b15](https://github.com/dongaber/peppap/commit/57a8b15752986cd0d96aa733eee1aa9af940cfa2))
+* show today's totals across Claude and Codex ([#17](https://github.com/dongaber/peppap/issues/17)) ([c8f05dc](https://github.com/dongaber/peppap/commit/c8f05dcded6530b1db428293d4aa330993f332f6))
+
+### Fixed
+
+* require a secret token for the local event server ([#14](https://github.com/dongaber/peppap/issues/14)) ([770c2cd](https://github.com/dongaber/peppap/commit/770c2cdb0d4a9d87ee4a25bd2cfa01eeb50f961b))
+
+### Changed
+
+* rename Claude session types and folder to agent sessions ([#13](https://github.com/dongaber/peppap/issues/13)) ([f5d298d](https://github.com/dongaber/peppap/commit/f5d298d601209569327cb280f1a88903cf3621d4))
+
 ## [1.0.0](https://github.com/dongaber/peppap/compare/v0.6.1...v1.0.0) (2026-10-21)
 
 ### Added
