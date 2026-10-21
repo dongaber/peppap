@@ -9,6 +9,11 @@ final class TranscriptReader: @unchecked Sendable {
 
     private var states: [String: State] = [:]
     private let queue = DispatchQueue(label: "peppap.transcripts")
+    private let agent: Agent
+
+    init(agent: Agent = .claude) {
+        self.agent = agent
+    }
 
     func metrics(path: String, taskStart: Date?, completion: @escaping @Sendable (SessionMetrics) -> Void) {
         queue.async {
@@ -21,7 +26,7 @@ final class TranscriptReader: @unchecked Sendable {
                 if let data = try? handle.readToEnd(), let text = String(data: data, encoding: .utf8),
                    let lastNewline = text.lastIndex(of: "\n") {
                     let complete = text[...lastNewline]
-                    state.entries.merge(UsageParser.entries(in: complete)) { a, _ in a }
+                    state.entries.merge(self.agent == .claude ? UsageParser.entries(in: complete) : CodexLog.entries(in: complete)) { a, _ in a }
                     state.offset += UInt64(complete.utf8.count)
                 }
             }
@@ -30,7 +35,7 @@ final class TranscriptReader: @unchecked Sendable {
             var m = SessionMetrics()
             if let last = state.entries.values.filter({ !$0.sidechain }).max(by: { $0.date < $1.date }) {
                 m.contextTokens = last.contextTokens
-                m.contextWindow = UsageParser.contextWindow(for: last.model)
+                m.contextWindow = last.contextWindow ?? UsageParser.contextWindow(for: last.model)
             }
             for e in state.entries.values {
                 m.tokens += e.tokens

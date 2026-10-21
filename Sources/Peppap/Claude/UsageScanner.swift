@@ -10,6 +10,8 @@ struct UsageSummary {
     var blockEnd: Date?
     /// Стоимость по дням (ключ — начало дня).
     var dailyCost: [Date: Double] = [:]
+    /// Codex: точные лимиты из последнего token_count в журналах.
+    var limits: CodexLog.Limits?
 }
 
 /// Одна запись об использовании из журнала (один ответ модели).
@@ -20,6 +22,8 @@ struct UsageEntry: Sendable {
     let contextTokens: Int
     let sidechain: Bool
     let model: String
+    /// Окно контекста, если журнал его называет (Codex); иначе — по модели.
+    var contextWindow: Int? = nil
 }
 
 /// Разбор журналов ~/.claude/projects/**/*.jsonl: токены, стоимость (по ценам API), контекст.
@@ -85,11 +89,16 @@ enum UsageParser {
     }
 }
 
-/// Сводка по всем журналам за неделю (раз в минуту).
+/// Сводка по всем журналам агента за неделю (раз в минуту).
 final class UsageScanner: @unchecked Sendable {
-    /// Кэш разобранных файлов: путь -> (дата изменения, записи).
-    private var cache: [String: (Date, [String: UsageEntry])] = [:]
+    /// Кэш разобранных файлов: путь -> (дата изменения, записи, лимиты).
+    private var cache: [String: (Date, [String: UsageEntry], CodexLog.Limits?)] = [:]
     private let lock = NSLock()
+    private let agent: Agent
+
+    init(agent: Agent = .claude) {
+        self.agent = agent
+    }
 
     private static let blockLength: TimeInterval = 5 * 3600
 
@@ -99,10 +108,11 @@ final class UsageScanner: @unchecked Sendable {
 
         let now = Date()
         let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Calendar.current.startOfDay(for: now))!
-        let root = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/projects")
+        let root = agent == .claude ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/projects") : CodexLog.root
         let keys: [URLResourceKey] = [.contentModificationDateKey, .isRegularFileKey]
 
         var entries: [String: UsageEntry] = [:]
+        var limits: CodexLog.Limits?
         var seen = Set<String>()
         if let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys) {
             for case let url as URL in walker where url.pathExtension == "jsonl" {
@@ -111,19 +121,23 @@ final class UsageScanner: @unchecked Sendable {
                       let modified = values.contentModificationDate, modified > weekAgo else { continue }
                 seen.insert(url.path)
                 let parsed: [String: UsageEntry]
+                let fileLimits: CodexLog.Limits?
                 if let cached = cache[url.path], cached.0 == modified {
-                    parsed = cached.1
+                    (parsed, fileLimits) = (cached.1, cached.2)
                 } else {
                     let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-                    parsed = UsageParser.entries(in: text[...])
-                    cache[url.path] = (modified, parsed)
+                    parsed = agent == .claude ? UsageParser.entries(in: text[...]) : CodexLog.entries(in: text[...])
+                    fileLimits = agent == .claude ? nil : CodexLog.limits(in: text[...])
+                    cache[url.path] = (modified, parsed, fileLimits)
                 }
                 entries.merge(parsed) { a, _ in a }
+                if let l = fileLimits, l.at > limits?.at ?? .distantPast { limits = l }
             }
         }
         cache = cache.filter { seen.contains($0.key) }
 
         var summary = UsageSummary()
+        summary.limits = limits
         let cal = Calendar.current
         let startOfDay = cal.startOfDay(for: now)
         let sorted = entries.values.filter { $0.date > weekAgo }.sorted { $0.date < $1.date }

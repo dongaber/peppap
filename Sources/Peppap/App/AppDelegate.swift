@@ -4,13 +4,13 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let store = SessionStore()
+    private let agents = Agents(claude: SessionStore(), codex: SessionStore(agent: .codex))
     private let settings = SettingsWindow()
     private let onboarding = OnboardingWindow()
     private let updater = Updater()
     private let servers = Forge.allCases.map { ForgeServer($0) }
     private var forges: Forges!
-    private var monitor: ClaudeMonitor!
+    private var monitors: [AgentMonitor] = []
     private var updatePrompt: UpdatePrompt!
     private var server: EventServer?
     private var notch: NotchController!
@@ -22,11 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Prefs.register()
         forges = Forges(gitlab: MergeRequestStore(source: servers[0]), github: MergeRequestStore(source: servers[1]))
-        monitor = ClaudeMonitor(store: store)
+        monitors = agents.all.map(AgentMonitor.init)
         updatePrompt = UpdatePrompt(updater: updater)
-        notch = NotchController(store: store, forges: forges, updater: updater, actions: NotchActions(
+        notch = NotchController(agents: agents, forges: forges, updater: updater, actions: NotchActions(
             select: { [weak self] s in self?.select(s) },
-            installHooks: { [weak self] in self?.installHooks() },
+            installHooks: { [weak self] agent in self?.installHooks(agent) },
             rename: { [weak self] s in self?.rename(s) },
             send: { [weak self] s, text in self?.send(text, to: s) },
             installUpdate: { [weak self] in self?.updatePrompt.installAvailable() },
@@ -40,20 +40,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         debug = DebugCommands(updater: updater, updatePrompt: updatePrompt, demo: demo, onboarding: onboarding,
                               showOnboarding: { [weak self] in self?.showOnboarding() },
                               startDemo: { [weak self] record, language in self?.startDemo(record: record, language: language) })
-        HookInstaller.updateIfNeeded()
-        store.hooksInstalled = HookInstaller.isInstalled
-        store.onAttention = { [weak self] s in self?.attention(s) }
+        for store in agents.all {
+            store.agent.updateHooksIfNeeded()
+            store.hooksInstalled = store.agent.hooksInstalled
+            store.onAttention = { [weak self] s in self?.attention(s) }
+        }
         for f in forges.all {
             f.onEvents = { [weak self] events in self?.attention(events) }
         }
 
         let server = EventServer(
-            onEvent: { [weak self] event in self?.store.handle(event) },
-            onAbandoned: { [weak self] id in self?.store.permissionAbandoned(id) },
-            onStatus: { [weak self] info in self?.store.applyStatus(info) }
+            onEvent: { [weak self] event in self?.agents[event.agent].handle(event) },
+            onAbandoned: { [weak self] id in self?.agents.all.forEach { $0.permissionAbandoned(id) } },
+            onStatus: { [weak self] info in self?.agents.claude.applyStatus(info) }
         )
-        store.onPermissionReply = { [weak server] id, body in server?.reply(id, json: body) }
-        server.debugState = { [weak self] in self?.store.debugDescription ?? "" }
+        for store in agents.all {
+            store.onPermissionReply = { [weak server] id, body in server?.reply(id, json: body) }
+        }
+        server.debugState = { [weak self] in self?.agents.all.map(\.debugDescription).joined() ?? "" }
         server.debugCommand = { [weak self] path in self?.debug.handle(path) ?? "" }
         do {
             try server.start()
@@ -68,12 +72,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKey.set(Prefs.hotkey)
         self.hotKey = hotKey
 
-        statusMenu = StatusMenu(store: store, forges: forges, updater: updater)
+        statusMenu = StatusMenu(agents: agents, forges: forges, updater: updater)
         statusMenu.delegate = self
         updater.startAutomaticChecks()
         forges.all.forEach { $0.start() }
-        if OnboardingWindow.shouldShow(hooksInstalled: store.hooksInstalled) { showOnboarding() }
-        monitor.start()
+        if OnboardingWindow.shouldShow(hooksInstalled: !agents.connected.isEmpty) { showOnboarding() }
+        monitors.forEach { $0.start() }
     }
 
     // MARK: - События
@@ -93,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
         }
         if Prefs.autoExpand && !quiet {
-            notch.peek(for: s.phase == .permission ? max(8, Prefs.peekSeconds) : Prefs.peekSeconds)
+            notch.peek(for: s.phase == .permission ? max(8, Prefs.peekSeconds) : Prefs.peekSeconds, tab: .sessions(s.agent))
         }
     }
 
@@ -102,21 +106,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !demo.isRunning, let top = events.max(by: { $0.kind < $1.kind }) else { return }
         let quiet = Quiet.isQuiet
         if Prefs.sound && !quiet { NSSound(named: Prefs.eventSound(top.mr.forge))?.play() }
-        // Пока Claude работает или ждёт ответа, челку занимают сессии; событие останется в индикаторе.
-        let busy = store.topPhase == .working || store.topPhase == .permission
+        // Пока агент работает или ждёт ответа, челку занимают сессии; событие останется в индикаторе.
+        let busy = agents.topPhase == .working || agents.topPhase == .permission
         if Prefs.autoExpand && !quiet && !busy {
             notch.peek(for: Prefs.peekSeconds, tab: top.tab, mergeRequest: top.mr.id)
         }
     }
 
     private func select(_ s: ClaudeSession) {
-        store.markSeen(s.id)
+        agents[s.agent].markSeen(s.id)
         notch.collapse()
         TerminalFocus.focus(s)
     }
 
     private func send(_ text: String, to s: ClaudeSession) {
-        store.markSeen(s.id)
+        agents[s.agent].markSeen(s.id)
         TerminalFocus.send(text, to: s)
     }
 
@@ -133,26 +137,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         a.addButton(withTitle: L("Cancel", "Отмена"))
         a.window.initialFirstResponder = field
         if a.runModal() == .alertFirstButtonReturn {
-            store.rename(s.id, to: field.stringValue)
+            agents[s.agent].rename(s.id, to: field.stringValue)
         }
     }
 
     // MARK: - Hooks
 
-    private func installHooks(quiet: Bool) {
+    private func installHooks(_ agent: Agent, quiet: Bool) {
         do {
-            try HookInstaller.install()
-            store.hooksInstalled = true
+            try agent.installHooks()
+            agents[agent].hooksInstalled = true
             if quiet { return } // окно приветствия само показывает «Подключено»
-            showAlert(L("Hooks connected", "Hooks подключены"),
-                      L("Peppap was added to ~/.claude/settings.json (backup: settings.json.peppap-backup). "
-                        + "Running Claude Code sessions pick up the change after a restart.",
-                        "Peppap прописан в ~/.claude/settings.json (резервная копия: settings.json.peppap-backup). "
-                        + "Уже открытые сессии Claude Code подхватят изменения после перезапуска."))
+            switch agent {
+            case .claude:
+                showAlert(L("Hooks connected", "Hooks подключены"),
+                          L("Peppap was added to ~/.claude/settings.json (backup: settings.json.peppap-backup). "
+                            + "Running Claude Code sessions pick up the change after a restart.",
+                            "Peppap прописан в ~/.claude/settings.json (резервная копия: settings.json.peppap-backup). "
+                            + "Уже открытые сессии Claude Code подхватят изменения после перезапуска."))
+            case .codex:
+                showAlert(L("Codex hooks connected", "Hooks Codex подключены"), Self.codexTrustNote)
+            }
         } catch {
             showAlert(L("Couldn't connect the hooks", "Не удалось подключить hooks"), error.localizedDescription)
         }
     }
+
+    /// Codex запускает новые hooks только после проверки в /hooks.
+    static let codexTrustNote = L("Peppap was added to ~/.codex/hooks.json (backup: hooks.json.peppap-backup). "
+                                  + "Codex runs new hooks only after you review them: run /hooks in Codex and trust the Peppap hooks. "
+                                  + "Running Codex sessions pick up the change after a restart.",
+                                  "Peppap прописан в ~/.codex/hooks.json (резервная копия: hooks.json.peppap-backup). "
+                                  + "Codex запускает новые hooks только после проверки: выполните /hooks в Codex и доверьте hooks Peppap. "
+                                  + "Уже открытые сессии Codex подхватят изменения после перезапуска.")
 
     // MARK: - Демо
 
@@ -168,12 +185,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 extension AppDelegate: StatusMenuDelegate {
     func offerUpdate() { updatePrompt.offerAvailable() }
     func toggleNotch() { notch.toggleFromHotKey() }
-    func installHooks() { installHooks(quiet: false) }
+    func installHooks(_ agent: Agent) { installHooks(agent, quiet: false) }
 
-    func uninstallHooks() {
+    func uninstallHooks(_ agent: Agent) {
         do {
-            try HookInstaller.uninstall()
-            store.hooksInstalled = false
+            try agent.uninstallHooks()
+            agents[agent].hooksInstalled = false
         } catch {
             showAlert(L("Couldn't remove the hooks", "Не удалось удалить hooks"), error.localizedDescription)
         }
@@ -181,11 +198,11 @@ extension AppDelegate: StatusMenuDelegate {
 
     func openSettings() {
         settings.show(SettingsView(
-            store: store,
+            agents: agents,
             forges: forges,
             servers: servers,
-            onInstallHooks: { [weak self] in self?.installHooks() },
-            onUninstallHooks: { [weak self] in self?.uninstallHooks() },
+            onInstallHooks: { [weak self] agent in self?.installHooks(agent) },
+            onUninstallHooks: { [weak self] agent in self?.uninstallHooks(agent) },
             onHotKeyChange: { [weak self] preset in self?.hotKey?.set(preset) },
             onCheckUpdates: { [weak self] in self?.updatePrompt.checkManually() }
         ))
@@ -193,18 +210,19 @@ extension AppDelegate: StatusMenuDelegate {
 
     func showOnboarding() {
         onboarding.show(OnboardingView(
-            store: store,
-            onInstallHooks: { [weak self] in self?.installHooks(quiet: true) },
+            agents: agents,
+            onInstallHooks: { [weak self] agent in self?.installHooks(agent, quiet: true) },
             onOpenSettings: { [weak self] in self?.openSettings() },
             onPlayDemo: { [weak self] in self?.playDemo() },
             onDone: { [weak self] in self?.onboarding.close() }
         ))
     }
 
-    func exportReport() {
-        let md = Report.week(records: store.history, days: store.week)
+    func exportReport(_ agent: Agent) {
+        let store = agents[agent]
+        let md = Report.week(records: store.history, days: store.week, agent: agent)
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "claude-week-\(DayStats.key()).md"
+        panel.nameFieldStringValue = "\(agent.rawValue)-week-\(DayStats.key()).md"
         panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
         NSApp.activate()
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -230,5 +248,5 @@ extension AppDelegate: StatusMenuDelegate {
         startDemo(record: true)
     }
 
-    func refreshStats() { monitor.refreshUsage() }
+    func refreshStats() { monitors.forEach { $0.refreshUsage() } }
 }

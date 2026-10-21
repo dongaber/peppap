@@ -110,23 +110,25 @@ let gitlabEventTests: [(String, @MainActor () throws -> Void)] = [
 
 let navigationTests: [(String, @MainActor () throws -> Void)] = [
     ("источники и подвкладки", {
-        expectEqual(NotchSource.claude.tabs, [.sessions, .today, .week])
+        expectEqual(NotchSource.claude.tabs, [.sessions(.claude), .today(.claude), .week(.claude)])
+        expectEqual(NotchSource.codex.tabs, [.sessions(.codex), .today(.codex), .week(.codex)])
         expectEqual(NotchSource.gitlab.tabs, [.mine(.gitlab), .review(.gitlab)])
         expectEqual(NotchSource.github.tabs, [.mine(.github), .review(.github)])
-        expectEqual(NotchSource.visible(forges: []), [.claude])
-        expectEqual(NotchSource.visible(forges: [.github]), [.claude, .github])
-        expectEqual(NotchSource.visible(forges: [.github, .gitlab]), [.claude, .gitlab, .github])
+        expectEqual(NotchSource.visible(agents: [], forges: []), [.claude]) // ничего не подключено — Claude с баннером
+        expectEqual(NotchSource.visible(agents: [.claude], forges: [.github]), [.claude, .github])
+        expectEqual(NotchSource.visible(agents: [.codex], forges: []), [.codex])
+        expectEqual(NotchSource.visible(agents: [.codex, .claude], forges: [.github, .gitlab]), [.claude, .codex, .gitlab, .github])
     }),
     ("источник помнит свою подвкладку", {
         let ui = NotchUIState()
-        ui.tab = .week
+        ui.tab = .week(.claude)
         ui.select(.gitlab)
         expectEqual(ui.tab, .mine(.gitlab))
         ui.tab = .review(.gitlab)
         ui.select(.github)
         expectEqual(ui.tab, .mine(.github))
         ui.select(.claude)
-        expectEqual(ui.tab, .week)
+        expectEqual(ui.tab, .week(.claude))
         ui.select(.gitlab)
         expectEqual(ui.tab, .review(.gitlab))
     }),

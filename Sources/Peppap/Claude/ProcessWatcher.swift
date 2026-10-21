@@ -1,6 +1,6 @@
 import Foundation
 
-/// Запущенный процесс Claude Code.
+/// Запущенный процесс Claude Code или Codex.
 struct LiveClaude: Sendable {
     let pid: Int32
     let tty: String
@@ -9,9 +9,11 @@ struct LiveClaude: Sendable {
     var hostBundleID: String?
     var termProgram: String?
 
-    var resumeID: String? {
+    /// id продолженной сессии: `claude --resume <id>`, `codex resume <id>`.
+    func resumeID(_ agent: Agent = .claude) -> String? {
         let parts = args.split(separator: " ").map(String.init)
-        guard let i = parts.firstIndex(where: { $0 == "--resume" || $0 == "-r" }), i + 1 < parts.count else { return nil }
+        let flags: Set<String> = agent == .claude ? ["--resume", "-r"] : ["resume"]
+        guard let i = parts.firstIndex(where: flags.contains), i + 1 < parts.count, !parts[i + 1].hasPrefix("-") else { return nil }
         return parts[i + 1]
     }
 }
@@ -25,15 +27,16 @@ struct TranscriptSnapshot: Sendable {
     var lastEntryAt: Date?
 }
 
-/// Процессы `claude`: какие сессии живы, где они запущены.
+/// Процессы `claude` и `codex`: какие сессии живы, где они запущены.
 enum ProcessWatcher {
-    /// Список процессов Claude Code (быстро: один вызов ps).
-    static func running() -> [LiveClaude] {
-        run("/bin/ps", ["-axo", "pid=,tty=,comm=,args="]).split(separator: "\n").compactMap { line in
+    /// Список процессов агента в терминалах (быстро: один вызов ps).
+    static func running(_ agent: Agent = .claude) -> [LiveClaude] {
+        let name = agent == .claude ? "claude" : "codex"
+        return run("/bin/ps", ["-axo", "pid=,tty=,comm=,args="]).split(separator: "\n").compactMap { line in
             let cols = line.split(separator: " ", maxSplits: 3, omittingEmptySubsequences: true).map(String.init)
             guard cols.count >= 3, let pid = Int32(cols[0]) else { return nil }
             let comm = cols[2]
-            guard comm == "claude" || comm.hasSuffix("/claude"), cols[1] != "??" else { return nil }
+            guard comm == name || comm.hasSuffix("/" + name), cols[1] != "??" else { return nil }
             return LiveClaude(pid: pid, tty: cols[1], args: cols.count > 3 ? cols[3] : "")
         }
     }

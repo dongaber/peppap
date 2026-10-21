@@ -3,8 +3,8 @@ import SwiftUI
 
 /// Окно первого запуска: язык, подключение hooks, GitLab и GitHub, разрешения, как пользоваться.
 struct OnboardingView: View {
-    @ObservedObject var store: SessionStore
-    let onInstallHooks: () -> Void
+    @ObservedObject var agents: Agents
+    let onInstallHooks: (Agent) -> Void
     let onOpenSettings: () -> Void
     let onPlayDemo: () -> Void
     let onDone: () -> Void
@@ -17,8 +17,8 @@ struct OnboardingView: View {
                 Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 64, height: 64)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L("Welcome to Peppap", "Добро пожаловать в Peppap")).font(.title2.bold())
-                    Text(L("Your dev status in the notch: Claude Code sessions, GitLab merge requests and GitHub pull requests.",
-                           "Ваш рабочий статус в челке: сессии Claude Code, merge requests в GitLab и pull requests в GitHub."))
+                    Text(L("Your dev status in the notch: Claude Code and Codex sessions, GitLab merge requests and GitHub pull requests.",
+                           "Ваш рабочий статус в челке: сессии Claude Code и Codex, merge requests в GitLab и pull requests в GitHub."))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -29,15 +29,19 @@ struct OnboardingView: View {
                 .fixedSize()
             }
 
-            Step(number: 1, title: L("Connect Claude Code", "Подключите Claude Code"),
-                 text: L("Peppap adds a small hook and a status line to ~/.claude/settings.json and keeps a backup. "
-                         + "Your own hooks and status line keep working.",
-                         "Peppap добавит небольшой hook и строку состояния в ~/.claude/settings.json и сохранит резервную копию. "
-                         + "Ваши hooks и строка состояния продолжат работать.")) {
-                if store.hooksInstalled {
-                    Label(L("Connected", "Подключено"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                } else {
-                    Button(L("Connect", "Подключить"), action: onInstallHooks).buttonStyle(.borderedProminent)
+            Step(number: 1, title: L("Connect Claude Code or Codex", "Подключите Claude Code или Codex"),
+                 text: L("Peppap adds a small hook to ~/.claude/settings.json (with a status line) or ~/.codex/hooks.json and keeps a backup. "
+                         + "Your own hooks and status line keep working. Codex runs new hooks only after you trust them: run /hooks in Codex once.",
+                         "Peppap добавит небольшой hook в ~/.claude/settings.json (со строкой состояния) или ~/.codex/hooks.json и сохранит резервную копию. "
+                         + "Ваши hooks и строка состояния продолжат работать. Новые hooks Codex запускает только после проверки: один раз выполните /hooks в Codex.")) {
+                VStack(alignment: .trailing, spacing: 6) {
+                    ForEach(Agent.allCases, id: \.self) { agent in
+                        if agents[agent].hooksInstalled {
+                            Label(agent.product, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                        } else {
+                            Button(agent.product) { onInstallHooks(agent) }.buttonStyle(.borderedProminent)
+                        }
+                    }
                 }
             }
 
@@ -57,9 +61,9 @@ struct OnboardingView: View {
 
             Step(number: 4, title: L("Use it", "Пользуйтесь"),
                  text: L("Hover over the notch or press \(Prefs.hotkey.title). "
-                         + "The notch expands by itself when Claude finishes or needs your permission, and when something happens to your merge or pull requests.",
+                         + "The notch expands by itself when Claude or Codex finishes or needs your permission, and when something happens to your merge or pull requests.",
                          "Наведите курсор на челку или нажмите \(Prefs.hotkey.title). "
-                         + "Челка раскроется сама, когда Claude закончит или попросит разрешения, и когда что-то случится с вашими merge или pull requests.")) {
+                         + "Челка раскроется сама, когда Claude или Codex закончит или попросит разрешения, и когда что-то случится с вашими merge или pull requests.")) {
                 Button(L("Play demo", "Показать демо"), action: onPlayDemo)
             }
 

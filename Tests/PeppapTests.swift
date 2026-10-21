@@ -21,6 +21,7 @@ enum PeppapTests {
             ("Navigation", navigationTests),
             ("GitLab actions", gitlabActionTests),
             ("GitHub", githubTests),
+            ("Codex", codexTests),
         ])
     }
 }

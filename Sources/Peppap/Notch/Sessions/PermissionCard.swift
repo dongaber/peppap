@@ -2,13 +2,14 @@ import SwiftUI
 
 struct PermissionCard: View {
     let prompt: PermissionPrompt
+    var agent = Agent.claude
     let answer: (PermissionAnswer) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "hand.raised.fill").foregroundStyle(.yellow).font(.system(size: 11))
-                Text(L("Claude wants to run ", "Claude хочет выполнить ") + prompt.tool)
+                Text(L("\(agent.title) wants to run ", "\(agent.title) хочет выполнить ") + prompt.tool)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Ink.primary)
                 Spacer()

@@ -21,32 +21,32 @@ struct DaySummary: Identifiable {
     var id: Date { day }
 }
 
-/// История задач за последние 30 дней в ~/Library/Application Support/Peppap/history.json.
+/// История задач за последние 30 дней в ~/Library/Application Support/Peppap: history.json (Claude), history-codex.json.
 enum History {
-    private static var url: URL {
+    private static func url(_ agent: Agent) -> URL {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Peppap", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("history.json")
+        return dir.appendingPathComponent(agent == .claude ? "history.json" : "history-\(agent.rawValue).json")
     }
 
-    static func load() -> [TaskRecord] {
-        guard let data = try? Data(contentsOf: url) else { return [] }
+    static func load(_ agent: Agent = .claude) -> [TaskRecord] {
+        guard let data = try? Data(contentsOf: url(agent)) else { return [] }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return (try? decoder.decode([TaskRecord].self, from: data)) ?? []
     }
 
-    static func save(_ records: [TaskRecord]) {
+    static func save(_ records: [TaskRecord], _ agent: Agent = .claude) {
         let cutoff = Date().addingTimeInterval(-30 * 86400)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         if let data = try? encoder.encode(records.filter { $0.start > cutoff }) {
-            try? data.write(to: url, options: .atomic)
+            try? data.write(to: url(agent), options: .atomic)
         }
     }
 
-    /// Последние 7 дней (включая сегодня): задачи и время — из истории, стоимость — из логов Claude Code.
+    /// Последние 7 дней (включая сегодня): задачи и время — из истории, стоимость — из журналов агента.
     static func week(_ records: [TaskRecord], dailyCost: [Date: Double]) -> [DaySummary] {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())

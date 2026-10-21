@@ -1,10 +1,10 @@
 import Foundation
 
-/// Фоновое наблюдение за Claude Code помимо hooks: живые процессы, журналы, расход токенов.
+/// Фоновое наблюдение за агентом помимо hooks: живые процессы, журналы, расход токенов.
 @MainActor
-final class ClaudeMonitor {
+final class AgentMonitor {
     private let store: SessionStore
-    private let scanner = UsageScanner()
+    private let scanner: UsageScanner
     private var timers: [Timer] = []
     private var scanning = false
     private var watching = false
@@ -13,6 +13,7 @@ final class ClaudeMonitor {
 
     init(store: SessionStore) {
         self.store = store
+        scanner = UsageScanner(agent: store.agent)
     }
 
     func start() {
@@ -39,9 +40,10 @@ final class ClaudeMonitor {
         if discover { lastDiscovery = Date() }
         let tried = triedPIDs
         let usedTranscripts = Set(store.sessions.compactMap(\.transcriptPath))
+        let agent = store.agent
 
         Task.detached(priority: .utility) {
-            let live = ProcessWatcher.running()
+            let live = ProcessWatcher.running(agent)
             var restored: [(LiveClaude, URL, TranscriptSnapshot)] = []
             var newTried: [Int32] = []
             if discover {
@@ -50,14 +52,15 @@ final class ClaudeMonitor {
                     newTried.append(p.pid)
                     let full = ProcessWatcher.details(p)
                     guard let cwd = full.cwd else { continue }
-                    let files = ProcessWatcher.transcripts(in: ProcessWatcher.projectDir(for: cwd))
-                    let byResume = full.resumeID.flatMap { id in files.first { $0.deletingPathExtension().lastPathComponent == id } }
+                    let files = agent == .claude ? ProcessWatcher.transcripts(in: ProcessWatcher.projectDir(for: cwd))
+                                                 : CodexLog.transcripts(cwd: cwd)
+                    let byResume = full.resumeID(agent).flatMap { id in files.first { $0.deletingPathExtension().lastPathComponent.hasSuffix(id) } }
                     guard let url = byResume ?? files.first(where: { !used.contains($0.path) }) else { continue }
                     used.insert(url.path)
-                    restored.append((full, url, ProcessWatcher.snapshot(path: url.path)))
+                    restored.append((full, url, Self.snapshot(agent, url.path)))
                 }
             }
-            let snapshots = stale.map { ($0.id, ProcessWatcher.snapshot(path: $0.path)) }
+            let snapshots = stale.map { ($0.id, Self.snapshot(agent, $0.path)) }
             let found = restored
             let checked = newTried
             await MainActor.run {
@@ -78,8 +81,13 @@ final class ClaudeMonitor {
             let summary = scanner.scan()
             await MainActor.run {
                 self.store.usage = summary
+                if let limits = summary.limits { self.store.applyLimits(limits) }
                 self.scanning = false
             }
         }
+    }
+
+    private nonisolated static func snapshot(_ agent: Agent, _ path: String) -> TranscriptSnapshot {
+        agent == .claude ? ProcessWatcher.snapshot(path: path) : CodexLog.snapshot(path: path)
     }
 }

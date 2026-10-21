@@ -19,11 +19,16 @@ enum HookInstaller {
     static var settingsURL: URL { home.appendingPathComponent(".claude/settings.json") }
     static var command: String { "\"\(scriptURL.path)\"" }
 
-    static let script = """
+    static let script = script(for: .claude)
+
+    /// Hook-скрипт агента: у Codex события приходят на /event/codex.
+    static func script(for agent: Agent) -> String {
+        let path = agent == .claude ? "/event" : "/event/\(agent.rawValue)"
+        return """
     #!/bin/sh
-    # Peppap: пересылает события хуков Claude Code в приложение в челке.
-    # Если приложение не запущено, curl тихо завершится, и Claude Code этого не заметит.
-    # На PermissionRequest ждёт решения из челки и печатает его в stdout для Claude Code.
+    # Peppap: пересылает события хуков \(agent.product) в приложение в челке.
+    # Если приложение не запущено, curl тихо завершится, и \(agent.product) этого не заметит.
+    # На PermissionRequest ждёт решения из челки и печатает его в stdout для \(agent.product).
     input=$(cat)
     wait=1
     case "$input" in *'"hook_event_name":"PermissionRequest"'*) wait=590 ;; esac
@@ -34,10 +39,11 @@ enum HookInstaller {
       -H "X-Peppap-Host: ${__CFBundleIdentifier:-}" \\
       -H "X-Peppap-Term: ${TERM_PROGRAM:-}" \\
       -H "X-Peppap-TTY: ${tty}" \\
-      --data-binary @- http://127.0.0.1:\(EventServer.port)/event 2>/dev/null
+      --data-binary @- http://127.0.0.1:\(EventServer.port)\(path) 2>/dev/null
     exit 0
 
     """
+    }
 
     static let statusScript = """
     #!/bin/sh

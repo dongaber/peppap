@@ -5,7 +5,7 @@ struct TodayTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            StatsFooter(today: store.today, usage: store.usage, limits: store.freshLimits)
+            StatsFooter(today: store.today, usage: store.usage, limits: store.freshLimits, hasCost: store.agent.hasCost)
             Rectangle().fill(Ink.line).frame(height: 1)
             let records = store.todayRecords
             if records.isEmpty {
@@ -54,6 +54,7 @@ private struct StatsFooter: View {
     let today: DayStats
     let usage: UsageSummary?
     let limits: (fiveHour: StatusInfo.Limit?, sevenDay: StatusInfo.Limit?)?
+    let hasCost: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -61,13 +62,15 @@ private struct StatsFooter: View {
                 Stat(title: L("Tasks today", "Задач сегодня"), value: "\(today.tasks)")
                 Stat(title: L("Working time", "Время работы"), value: Fmt.hours(today.seconds))
                 Stat(title: L("Tokens today", "Токены сегодня"), value: usage.map { Fmt.tokens($0.todayTokens) } ?? "—")
-                Stat(title: L("≈ at API prices", "≈ по ценам API"), value: usage.map { Fmt.usd($0.todayCost) } ?? "—")
+                if hasCost {
+                    Stat(title: L("≈ at API prices", "≈ по ценам API"), value: usage.map { Fmt.usd($0.todayCost) } ?? "—")
+                }
             }
             if let l = limits, l.fiveHour != nil || l.sevenDay != nil {
                 if let f = l.fiveHour { LimitBar(title: L("5-hour limit", "Лимит 5 ч"), limit: f) }
                 if let w = l.sevenDay { LimitBar(title: L("Weekly limit", "Лимит недели"), limit: w) }
             } else if let u = usage {
-                BlockBar(usage: u)
+                BlockBar(usage: u, hasCost: hasCost)
             }
         }
     }
@@ -119,6 +122,7 @@ private struct LimitBar: View {
 /// Текущее 5-часовое окно лимитов: сколько израсходовано и когда сброс (оценка по журналам).
 private struct BlockBar: View {
     let usage: UsageSummary
+    let hasCost: Bool
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { ctx in
@@ -126,7 +130,7 @@ private struct BlockBar: View {
                 HStack {
                     Text(L("5-hour window (estimate)", "Окно 5 ч (оценка)")).foregroundStyle(Ink.secondary)
                     if let end = usage.blockEnd {
-                        Text("\(Fmt.tokens(usage.blockTokens)) · \(Fmt.usd(usage.blockCost))").foregroundStyle(Ink.primary.opacity(0.85))
+                        Text(Fmt.tokens(usage.blockTokens) + (hasCost ? " · " + Fmt.usd(usage.blockCost) : "")).foregroundStyle(Ink.primary.opacity(0.85))
                         Spacer()
                         Text(L("resets in ", "сброс через ") + Fmt.hours(end.timeIntervalSince(ctx.date))).foregroundStyle(Ink.muted)
                     } else {

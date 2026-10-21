@@ -1,12 +1,14 @@
 import Foundation
 
-/// Предпросмотр изменений для карточки разрешения (Edit / MultiEdit / Write).
+/// Предпросмотр изменений для карточки разрешения (Edit / MultiEdit / Write, apply_patch в Codex).
 enum Diff {
     static let maxLines = 16
 
     static func preview(tool: String, input: [String: Any]) -> [DiffLine] {
         var pairs: [(String, String)] = []
         switch tool {
+        case "apply_patch":
+            return limited(patch(HookEvent.command(input)))
         case "Edit":
             pairs = [(input["old_string"] as? String ?? "", input["new_string"] as? String ?? "")]
         case "MultiEdit":
@@ -26,10 +28,49 @@ enum Diff {
                 out.append(DiffLine(id: out.count, kind: line.0, text: line.1))
             }
         }
+        return limited(out)
+    }
+
+    private static func limited(_ lines: [DiffLine]) -> [DiffLine] {
+        var out = lines
         if out.count > maxLines {
             let hidden = out.count - maxLines
             out = Array(out.prefix(maxLines))
             out.append(DiffLine(id: out.count, kind: .gap, text: L("… \(hidden) more ", "… ещё \(hidden) ") + Fmt.lines(hidden)))
+        }
+        return out
+    }
+
+    /// Файлы патча Codex: строки «*** Update File: путь», «*** Add File:», «*** Delete File:».
+    static func patchFiles(_ patch: String) -> [String] {
+        let prefixes = ["*** Update File: ", "*** Add File: ", "*** Delete File: "]
+        return patch.components(separatedBy: "\n").compactMap { line in
+            prefixes.first(where: line.hasPrefix).map { String(line.dropFirst($0.count)).trimmingCharacters(in: .whitespaces) }
+        }
+    }
+
+    /// Строки патча Codex: «+» и «-» — изменения, пробел — контекст, «@@» и смена файла — разрыв.
+    private static func patch(_ text: String) -> [DiffLine] {
+        var out: [DiffLine] = []
+        for line in text.components(separatedBy: "\n") {
+            if line.hasPrefix("*** Begin Patch") || line.hasPrefix("*** End Patch") || line.hasPrefix("*** Move to:") { continue }
+            let kind: DiffLine.Kind
+            var body = String(line.dropFirst())
+            if line.hasPrefix("*** ") || line.hasPrefix("@@") {
+                if out.isEmpty { continue }
+                kind = .gap
+                body = ""
+            } else if line.hasPrefix("+") {
+                kind = .add
+            } else if line.hasPrefix("-") {
+                kind = .remove
+            } else if line.hasPrefix(" ") {
+                kind = .context
+            } else {
+                continue
+            }
+            if kind == .gap && out.last?.kind == .gap { continue }
+            out.append(DiffLine(id: out.count, kind: kind, text: body))
         }
         return out
     }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ExpandedView: View {
-    @ObservedObject var store: SessionStore
+    @ObservedObject var agents: Agents
     @ObservedObject var forges: Forges
     @ObservedObject var ui: NotchUIState
     @ObservedObject var updater: Updater
@@ -13,13 +13,17 @@ struct ExpandedView: View {
     /// Ширина «крыла» слева и справа от аппаратной челки: содержимое верхней строки не заходит под неё.
     private var wing: CGFloat { (Self.width(notch: ui.notchWidth) - 2 * Self.padding - ui.notchWidth - 12) / 2 }
 
-    /// Вкладка выключенного источника (GitLab или GitHub без настроек) не показывается.
+    private var sources: [NotchSource] { NotchSource.visible(agents: agents.connected, forges: forges.configured) }
+
+    /// Вкладка скрытого источника (агент без hooks, GitLab или GitHub без настроек) не показывается.
     private var tab: NotchTab {
-        if let f = ui.tab.forge, !forges[f].isConfigured { return .sessions }
-        return ui.tab
+        if sources.contains(ui.tab.source) { return ui.tab }
+        return .sessions(sources.first?.agent ?? .claude)
     }
-    /// Стор открытого сервиса; nil на вкладках Claude.
+    /// Стор открытого сервиса; nil на вкладках агентов.
     private var forge: MergeRequestStore? { tab.forge.map { forges[$0] } }
+    /// Стор открытого агента; nil на вкладках сервисов.
+    private var store: SessionStore? { tab.agent.map { agents[$0] } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -49,9 +53,9 @@ struct ExpandedView: View {
             .padding(.top, -4)
 
             switch tab {
-            case .sessions: sessionsTab
-            case .today: TodayTab(store: store)
-            case .week: WeekTab(store: store)
+            case .sessions(let a): sessionsTab(agents[a])
+            case .today(let a): TodayTab(store: agents[a])
+            case .week(let a): WeekTab(store: agents[a]).id(a) // у каждого агента свой выбор метрики
             case .mine(let f), .review(let f): MergeRequestsTab(store: forges[f], ui: ui, tab: tab, actions: actions)
             }
 
@@ -65,12 +69,23 @@ struct ExpandedView: View {
 
     private func sourceButtons(compact: Bool) -> some View {
         HStack(spacing: 2) {
-            ForEach(NotchSource.visible(forges: forges.configured), id: \.self) { source in
+            ForEach(sources, id: \.self) { source in
                 SourceButton(source: source, selected: tab.source == source, compact: compact,
-                             badge: source.forge.flatMap { forges[$0].attentionKind?.color }) { ui.select(source) }
+                             badge: badge(source)) { ui.select(source) }
             }
         }
         .fixedSize()
+    }
+
+    /// Точка на чипе: непросмотренные события сервиса или агент, которому нужно внимание.
+    private func badge(_ source: NotchSource) -> Color? {
+        if let f = source.forge { return forges[f].attentionKind?.color }
+        guard let a = source.agent else { return nil }
+        switch agents[a].topPhase {
+        case .permission: return .yellow
+        case .done: return .green
+        default: return nil
+        }
     }
 
     private func title(_ t: NotchTab) -> String {
@@ -82,29 +97,34 @@ struct ExpandedView: View {
         }
     }
 
-    @ViewBuilder private var sessionsTab: some View {
+    @ViewBuilder private func sessionsTab(_ store: SessionStore) -> some View {
         if !store.hooksInstalled {
-            HooksBanner(action: actions.installHooks)
+            HooksBanner(agent: store.agent) { actions.installHooks(store.agent) }
+        }
+        // Пока не подключён ни один агент, на вкладке Claude предлагаем и Codex.
+        if agents.connected.isEmpty && store.agent == .claude {
+            HooksBanner(agent: .codex) { actions.installHooks(.codex) }
         }
         if let release = updater.available {
             UpdateBanner(version: release.version, installing: updater.installing, action: actions.installUpdate)
         }
+        let command = store.agent == .claude ? "claude" : "codex"
         if store.visibleSessions.isEmpty {
-            Text(L("No active sessions. Run `claude` in a terminal.", "Нет активных сессий. Запустите `claude` в терминале."))
+            Text(L("No active sessions. Run `\(command)` in a terminal.", "Нет активных сессий. Запустите `\(command)` в терминале."))
                 .font(.system(size: 12))
                 .foregroundStyle(Ink.secondary)
                 .frame(maxWidth: .infinity, minHeight: 44)
         } else {
             // Без ViewThatFits: он измеряет список дважды, и размер «прыгает» во время анимации.
             if store.visibleSessions.count > 4 {
-                ScrollView { sessionList }.frame(height: 440)
+                ScrollView { sessionList(store) }.frame(height: 440)
             } else {
-                sessionList
+                sessionList(store)
             }
         }
     }
 
-    private var sessionList: some View {
+    private func sessionList(_ store: SessionStore) -> some View {
         VStack(spacing: 6) {
             ForEach(store.visibleSessions) { s in
                 SessionRow(session: s, selected: ui.selectedID == s.id, store: store, actions: actions)
@@ -114,6 +134,7 @@ struct ExpandedView: View {
 
     private var summary: String {
         if let forge { return forge.summary }
+        guard let store else { return "" }
         let working = store.visibleSessions.filter { $0.phase == .working }.count
         let total = store.visibleSessions.count
         if total == 0 { return L("no sessions", "нет сессий") }
@@ -122,18 +143,19 @@ struct ExpandedView: View {
 
     private var hint: String {
         let base = L("↑↓ select · ⏎ open · Tab tabs · Esc close", "↑↓ выбор · ⏎ перейти · Tab вкладки · Esc закрыть")
-        let sources = forges.configured.isEmpty ? "" : L(" · ←→ source", " · ←→ источник")
+        let switcher = sources.count > 1 ? L(" · ←→ source", " · ←→ источник") : ""
         if let forge {
             let list = (tab.isReview ? forge.snapshot?.review : forge.snapshot?.authored) ?? []
             let keys = list.first { $0.id == ui.selectedMR }.map { mr in
                 forge.actions(for: mr).map { $0.keys[0].uppercased() + " " + $0.shortTitle(mr.forge).lowercased() + " · " }.joined()
             } ?? ""
-            return keys + L("R refresh · ", "R обновить · ") + base + sources
+            return keys + L("R refresh · ", "R обновить · ") + base + switcher
         }
-        if let s = store.sessions.first(where: { $0.id == ui.selectedID }), let p = s.pending, p.questions.isEmpty {
-            return L("A allow · S always · D deny · T terminal · ", "A разрешить · S всегда · D отклонить · T в терминале · ") + base
+        if let s = store?.sessions.first(where: { $0.id == ui.selectedID }), let p = s.pending, p.questions.isEmpty {
+            let always = p.suggestionsJSON != nil ? L("S always · ", "S всегда · ") : ""
+            return L("A allow · ", "A разрешить · ") + always + L("D deny · T terminal · ", "D отклонить · T в терминале · ") + base
         }
-        return base + sources
+        return base + switcher
     }
 }
 
@@ -186,11 +208,12 @@ private struct SourceButton: View {
 }
 
 private struct HooksBanner: View {
+    let agent: Agent
     let action: () -> Void
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "bolt.horizontal.circle.fill").foregroundStyle(Color.claude)
-            Text(L("Connect the hooks so Peppap can see your sessions", "Подключите hooks, чтобы Peppap видел сессии"))
+            Text(L("Connect the \(agent.product) hooks so Peppap can see your sessions", "Подключите hooks \(agent.product), чтобы Peppap видел сессии"))
                 .font(.system(size: 12)).foregroundStyle(Ink.primary.opacity(0.85))
             Spacer()
             Button(L("Connect", "Подключить"), action: action)
