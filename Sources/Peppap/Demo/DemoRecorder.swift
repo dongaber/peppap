@@ -4,7 +4,7 @@ import SwiftUI
 /// Записывает демо-ролик для README: выдуманные сессии и merge requests, нейтральный фон, видео области вокруг челки.
 @MainActor
 final class DemoRecorder {
-    static let duration: TimeInterval = 58
+    static let duration: TimeInterval = 72
     static let size = CGSize(width: 920, height: 440)
 
     private let notch: NotchController
@@ -15,6 +15,7 @@ final class DemoRecorder {
     private var agents: Agents!
     private var forges: Forges!
     private var gitlabSource: DemoForge!
+    private var github: MergeRequestStore { forges.github }
     private var gitlab: MergeRequestStore { forges.gitlab }
 
     init(notch: NotchController) {
@@ -154,11 +155,14 @@ final class DemoRecorder {
                              sevenDay: StatusInfo.Limit(percent: 18, resetsAt: now.addingTimeInterval(4 * 86400)))
         store.hooksInstalled = true // без баннера «Подключите hooks»
         // Codex в демо не подключён — его источника не видно.
-        agents = Agents(claude: store, codex: SessionStore(agent: .codex, persistent: false))
+        let codex = SessionStore(agent: .codex, persistent: false)
+        codex.hooksInstalled = true
+        agents = Agents(claude: store, codex: codex)
         gitlabSource = DemoForge(Self.gitlabSnapshot(later: false))
         // GitHub в демо не подключён: пустой токен — без обращения к связке ключей.
-        forges = Forges(gitlab: MergeRequestStore(source: gitlabSource), github: MergeRequestStore(source: ForgeServer(.github, token: "")))
+        forges = Forges(gitlab: MergeRequestStore(source: gitlabSource), github: MergeRequestStore(source: DemoForge(Self.githubSnapshot, forge: .github)))
         gitlab.refresh()
+        github.refresh()
     }
 
     /// Выдуманные merge requests. `later` — следующее «обновление»: пайплайн прошёл, позвали на ревью.
@@ -194,6 +198,30 @@ final class DemoRecorder {
             mr("31", "Draft: CSV export for reports", project: "acme/landing", mine: true, status: "DRAFT_STATUS",
                pipeline: .success, draft: true, minutesAgo: 190),
         ], review: review)
+    }
+
+    /// Выдуманные pull requests: в своём упали проверки, чужой ждёт ревью.
+    static var githubSnapshot: Forge.Snapshot {
+        func pr(_ number: String, _ title: String, repo: String, author: String? = nil, mine: Bool, status: String,
+                pipeline: MergeRequest.Pipeline, notes: Int, minutesAgo: Double) -> MergeRequest {
+            var m = MergeRequest(forge: .github, iid: number, title: title, url: URL(string: "https://github.com/\(repo)/pull/\(number)")!,
+                                 project: repo, author: author, mine: mine, draft: false,
+                                 updatedAt: Date().addingTimeInterval(-minutesAgo * 60), conflicts: false, mergeStatus: status,
+                                 discussionsResolved: true, pipeline: pipeline, notes: notes, approvedBy: [])
+            m.sha = "demo"
+            m.nodeID = "PR_demo_\(number)"
+            m.pipelineIDs = pipeline == .failed ? ["1001"] : []
+            m.can = MergeRequest.Permissions(approve: true, merge: true, autoMerge: true, update: true,
+                                             pushToSourceBranch: true, retryPipeline: true)
+            return m
+        }
+        return Forge.Snapshot(username: "alex", authored: [
+            pr("42", "Cache images on disk", repo: "acme/ios-client", mine: true, status: "CI_MUST_PASS", pipeline: .failed,
+               notes: 1, minutesAgo: 12),
+        ], review: [
+            pr("17", "Add offline mode", repo: "acme/ios-client", author: "kate", mine: false, status: "NOT_APPROVED",
+               pipeline: .success, notes: 4, minutesAgo: 35),
+        ])
     }
 
     // MARK: - Сценарий
@@ -244,6 +272,39 @@ final class DemoRecorder {
                 ["label": L("Fix the code", "Исправить код"), "description": L("Restore the previous response format", "Вернуть прежний формат ответа")],
             ],
         ]]]
+
+        let codex = agents.codex
+        let c = "demo-3", cwdC = "/Users/demo/Projects/ios-client"
+        func cx(_ name: String, _ build: (inout HookEvent) -> Void = { _ in }) -> HookEvent {
+            var e = HookEvent(name: name, sessionID: c, cwd: cwdC)
+            e.agent = .codex
+            build(&e)
+            return e
+        }
+        let codexSteps = [L("Find where images load", "Найти загрузку картинок"), L("Add the disk cache", "Добавить кэш на диске"),
+                          L("Run the tests", "Прогнать тесты")]
+        func codexPlan(_ done: Int) -> [TodoItem] {
+            codexSteps.enumerated().map { i, t in TodoItem(id: "\(i)", title: t, active: nil, status: i < done ? "completed" : i == done ? "in_progress" : "pending") }
+        }
+        func codexMetrics(_ k: Double) {
+            codex.update(c) {
+                var m = SessionMetrics()
+                m.contextTokens = Int(k * 60_000); m.contextWindow = 272_000
+                m.taskTokens = Int(k * 90_000); m.tokens = Int(k * 140_000)
+                $0.metrics = m
+            }
+        }
+        let codexPatch = """
+            *** Begin Patch
+            *** Update File: Sources/ImageCache.swift
+            @@ final class ImageCache
+             private let memory = NSCache<NSURL, UIImage>()
+            +private let disk = DiskStore(name: "images")
+             func image(for url: URL) async throws -> UIImage {
+            -    if let hit = memory.object(forKey: url as NSURL) { return hit }
+            +    if let hit = memory.object(forKey: url as NSURL) ?? disk.image(for: url) { return hit }
+            *** End Patch
+            """
 
         let steps: [(TimeInterval, () -> Void)] = [
             (0.5, { self.store.handle(ev(a, "UserPromptSubmit") { $0.prompt = L("Add a dark theme to settings", "Добавь тёмную тему в настройки") }) }),
@@ -301,6 +362,26 @@ final class DemoRecorder {
             (52.0, { if let mr = self.demoMR("214") { _ = self.notch.ui.confirm(.merge, on: mr.id) } }),
             (53.5, { if let mr = self.demoMR("214"), self.notch.ui.confirm(.merge, on: mr.id) { self.gitlab.perform(.merge, on: mr) } }),
             (56.0, { self.notch.collapse() }),
+            // Codex: своя вкладка, план, разрешение на правку с предпросмотром патча.
+            (56.8, { codex.handle(cx("UserPromptSubmit") { $0.prompt = L("Cache images on disk", "Кэшируй картинки на диске") })
+                     codex.handle(cx("PreToolUse") { $0.activity = L("Updating the plan", "Обновляет план"); $0.todos = codexPlan(1) })
+                     codexMetrics(0.6) }),
+            (57.6, { self.notch.show(tab: .sessions(.codex)) }),
+            (59.0, { codex.handle(cx("PermissionRequest") {
+                         $0.toolName = "apply_patch"; $0.activity = "Edit ImageCache.swift"
+                         $0.permissionDetail = "~/Projects/ios-client/Sources/ImageCache.swift"
+                         $0.diff = Diff.preview(tool: "apply_patch", input: ["command": codexPatch])
+                         $0.permissionID = "demo-codex-permission"
+                     }) }),
+            (62.5, { codex.answer(.allow, sessionID: c) }),
+            (63.3, { codex.handle(cx("PostToolUse") { $0.filePaths = [cwdC + "/Sources/ImageCache.swift"] })
+                     codex.handle(cx("PreToolUse") { $0.activity = "$ swift test"; $0.todos = codexPlan(2) })
+                     codexMetrics(1.4) }),
+            (64.6, { codex.handle(cx("Stop") { $0.lastAnswer = L("Images are cached on disk now; tests pass.", "Картинки теперь кэшируются на диске, тесты проходят.") }) }),
+            // GitHub: упавшие проверки в своём PR — перезапуск.
+            (66.0, { self.notch.show(tab: .mine(.github), mergeRequest: self.github.snapshot?.authored.first?.id) }),
+            (68.0, { if let pr = self.github.snapshot?.authored.first { self.github.perform(.retryPipeline, on: pr) } }),
+            (70.5, { self.notch.collapse() }),
         ]
         for (t, step) in steps {
             DispatchQueue.main.asyncAfter(deadline: .now() + lead + t) { step() }

@@ -2,7 +2,7 @@
 
 Your dev status in the MacBook notch: Claude Code and Codex sessions, GitLab merge requests, GitHub pull requests and more.
 
-![Peppap: Claude Code sessions and GitLab merge requests in the notch](docs/demo.gif)
+![Peppap: Claude Code and Codex sessions, GitLab merge requests and GitHub pull requests in the notch](docs/demo.gif)
 
 <sub>Full video: [docs/demo.mp4](docs/demo.mp4). The demo uses made-up projects and data.</sub>
 
@@ -14,6 +14,10 @@ Your dev status in the MacBook notch: Claude Code and Codex sessions, GitLab mer
   <tr>
     <td><img src="docs/screenshot-gitlab-mine.png" alt="GitLab: my merge requests, one ready to merge with a Merge button"></td>
     <td><img src="docs/screenshot-gitlab-review.png" alt="GitLab: merge requests waiting for my review, with an Approve button"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshot-codex.png" alt="Codex: permission request for apply_patch with a patch preview"></td>
+    <td><img src="docs/screenshot-github.png" alt="GitHub: my pull request with failed checks and a Retry button"></td>
   </tr>
 </table>
 
@@ -128,8 +132,8 @@ Peppap records its own README demo with made-up sessions and merge requests. Rec
 
 ```sh
 . scripts/lib.sh && swiftc -sdk "$(pick_sdk)" scripts/make-demo-media.swift -o /tmp/make-demo-media
-/tmp/make-demo-media ~/Movies/Peppap/peppap-demo.mov docs 3 52 1840 10 \
-  permission@10 today@32 gitlab-review@50 gitlab-mine@54
+/tmp/make-demo-media ~/Movies/Peppap/peppap-demo.mov docs 3 67 1840 10 \
+  permission@10 today@32 gitlab-review@50 gitlab-mine@54 codex@62 github@68.5
 ```
 
 ## Contributing and releases
