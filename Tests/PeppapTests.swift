@@ -13,6 +13,7 @@ enum PeppapTests {
             ("Transcript", transcriptTests),
             ("SessionStore", sessionStoreTests),
             ("HookInstaller", hookInstallerTests),
+            ("Server token", serverTokenTests),
             ("Report", reportTests),
             ("L10n", l10nTests),
             ("Updater", updaterTests),

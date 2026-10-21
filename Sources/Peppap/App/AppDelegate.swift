@@ -50,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let server = EventServer(
+            token: ServerToken.loadOrCreate(),
             onEvent: { [weak self] event in self?.agents[event.agent].handle(event) },
             onAbandoned: { [weak self] id in self?.agents.all.forEach { $0.permissionAbandoned(id) } },
             onStatus: { [weak self] info in self?.agents.claude.applyStatus(info) }
