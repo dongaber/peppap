@@ -1,20 +1,22 @@
 import Foundation
 
-/// Выдуманный GitLab: отдаёт заданный список и применяет действия к нему, как это сделал бы сервер.
+/// Выдуманный GitLab или GitHub: отдаёт заданный список и применяет действия к нему, как это сделал бы сервер.
 @MainActor
-final class DemoGitLab: GitLabSource {
-    var snapshot: GitLab.Snapshot
+final class DemoForge: MergeRequestSource {
+    let forge: Forge
+    var snapshot: Forge.Snapshot
     /// Сколько «выполняется» действие.
     var latency: TimeInterval
 
-    init(_ snapshot: GitLab.Snapshot, latency: TimeInterval = 0.7) {
+    init(_ snapshot: Forge.Snapshot, forge: Forge = .gitlab, latency: TimeInterval = 0.7) {
+        self.forge = forge
         self.snapshot = snapshot
         self.latency = latency
     }
 
     var isConfigured: Bool { true }
 
-    func fetch() async throws -> GitLab.Snapshot { snapshot }
+    func fetch() async throws -> Forge.Snapshot { snapshot }
 
     func perform(_ action: MergeRequestAction, on mr: MergeRequest) async throws {
         if latency > 0 { try await Task.sleep(nanoseconds: UInt64(latency * 1_000_000_000)) }
@@ -23,5 +25,5 @@ final class DemoGitLab: GitLabSource {
         snapshot.review = snapshot.review.compactMap { $0.id == mr.id ? action.applied(to: $0, me: me) : $0 }
     }
 
-    func tokenScopes() async -> Set<String>? { ["api"] }
+    func tokenCanAct() async -> Bool? { true }
 }

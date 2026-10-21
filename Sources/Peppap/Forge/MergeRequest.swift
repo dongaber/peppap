@@ -1,6 +1,6 @@
 import Foundation
 
-/// Открытый merge request из GitLab.
+/// Открытый merge request из GitLab или pull request из GitHub.
 struct MergeRequest: Identifiable, Equatable {
     enum Pipeline: Equatable {
         case running, success, failed, canceled, manual
@@ -10,15 +10,15 @@ struct MergeRequest: Identifiable, Equatable {
     enum Status: Equatable {
         case ready, conflict, pipelineFailed, rebase, discussions, approval, pipelineRunning, draft, blocked, checking
 
-        var label: String {
+        func label(_ forge: Forge) -> String {
             switch self {
             case .ready: return L("ready to merge", "можно вливать")
             case .conflict: return L("conflicts", "конфликты")
-            case .pipelineFailed: return L("pipeline failed", "пайплайн упал")
+            case .pipelineFailed: return forge == .gitlab ? L("pipeline failed", "пайплайн упал") : L("checks failed", "проверки упали")
             case .rebase: return L("needs rebase", "нужен rebase")
             case .discussions: return L("open threads", "есть треды")
             case .approval: return L("needs approval", "ждёт аппрува")
-            case .pipelineRunning: return L("pipeline running", "идёт пайплайн")
+            case .pipelineRunning: return forge == .gitlab ? L("pipeline running", "идёт пайплайн") : L("checks running", "идут проверки")
             case .draft: return L("draft", "черновик")
             case .blocked: return L("blocked", "заблокирован")
             case .checking: return L("checking", "проверяется")
@@ -26,19 +26,23 @@ struct MergeRequest: Identifiable, Equatable {
         }
     }
 
-    /// Что GitLab разрешает текущему пользователю (userPermissions).
+    /// Что сервер разрешает текущему пользователю (в GitLab — userPermissions).
     struct Permissions: Equatable {
         var approve = false
+        var unapprove = false
         var merge = false
+        var autoMerge = false
         var update = false
         var pushToSourceBranch = false
         var retryPipeline = false
     }
 
+    var forge = Forge.gitlab
+    /// Номер MR в проекте (iid в GitLab, number в GitHub).
     let iid: String
     let title: String
     let url: URL
-    /// Полный путь проекта: group/subgroup/project.
+    /// Полный путь проекта: group/subgroup/project (в GitHub — owner/repo).
     let project: String
     let author: String?
     /// Из списка «Мои» (а не «Ревью»).
@@ -46,7 +50,7 @@ struct MergeRequest: Identifiable, Equatable {
     var draft: Bool
     let updatedAt: Date?
     let conflicts: Bool
-    /// detailedMergeStatus как есть (MERGEABLE, NOT_APPROVED, …).
+    /// detailedMergeStatus как есть (MERGEABLE, NOT_APPROVED, …). Состояние GitHub разбор приводит к тем же значениям.
     var mergeStatus: String?
     let discussionsResolved: Bool
     var pipeline: Pipeline?
@@ -59,7 +63,11 @@ struct MergeRequest: Identifiable, Equatable {
     var removeSourceBranch = false
     /// Уже стоит «влить после пайплайна».
     var autoMerge = false
-    var pipelineID: String? = nil
+    /// Что перезапускает «Перезапустить»: пайплайн в GitLab, упавшие workflow runs в GitHub.
+    var pipelineIDs: [String] = []
+    /// GitHub: id узла для мутаций и способ слияния по умолчанию для пользователя.
+    var nodeID: String? = nil
+    var mergeMethod: String? = nil
     var can = Permissions()
 
     var id: String { url.absoluteString }
@@ -73,7 +81,8 @@ struct MergeRequest: Identifiable, Equatable {
         return t.trimmingCharacters(in: .whitespaces)
     }
     var projectName: String { project.split(separator: "/").last.map(String.init) ?? project }
-    var reference: String { "\(projectName)!\(iid)" }
+    var reference: String { projectName + forge.referenceMark + iid }
+    var statusLabel: String { status.label(forge) }
 
     var status: Status {
         if conflicts || mergeStatus == "CONFLICT" { return .conflict }

@@ -20,6 +20,7 @@ enum PeppapTests {
             ("GitLab events", gitlabEventTests),
             ("Navigation", navigationTests),
             ("GitLab actions", gitlabActionTests),
+            ("GitHub", githubTests),
         ])
     }
 }

@@ -4,8 +4,8 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var store: SessionStore
-    @ObservedObject var gitlab: GitLabStore
-    let gitlabServer: GitLabServer
+    let forges: Forges
+    let servers: [ForgeServer]
     let onInstallHooks: () -> Void
     let onUninstallHooks: () -> Void
     let onHotKeyChange: (HotKeyPreset) -> Void
@@ -28,14 +28,6 @@ struct SettingsView: View {
     @AppStorage(Prefs.Key.haptics) private var haptics = true
     @AppStorage(Prefs.Key.quickReplies) private var quickReplies = Prefs.defaultQuickReplies
     @AppStorage(Prefs.Key.language) private var language = AppLanguage.system.rawValue
-    @AppStorage(Prefs.Key.gitlabEnabled) private var gitlabEnabled = true
-    @AppStorage(Prefs.Key.gitlabHost) private var gitlabHost = ""
-    @AppStorage(Prefs.Key.gitlabInterval) private var gitlabInterval = 120.0
-    @AppStorage(Prefs.Key.gitlabNotifyReview) private var gitlabNotifyReview = true
-    @AppStorage(Prefs.Key.gitlabNotifyFailed) private var gitlabNotifyFailed = true
-    @AppStorage(Prefs.Key.gitlabNotifyReady) private var gitlabNotifyReady = true
-    @AppStorage(Prefs.Key.gitlabSound) private var gitlabSound = "Ping"
-    @State private var gitlabToken = ""
     @AppStorage(Updater.checkKey) private var checkUpdates = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
@@ -97,7 +89,9 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            gitlabSection
+            ForEach(servers, id: \.forge) { server in
+                ForgeSection(store: forges[server.forge], server: server, sound: sound)
+            }
 
             Section(L("Notifications", "Уведомления")) {
                 Toggle(L("Sound", "Звук"), isOn: $sound)
@@ -175,33 +169,72 @@ struct SettingsView: View {
         .frame(minWidth: 480, idealWidth: 540, minHeight: 320, idealHeight: 640)
     }
 
-    private var gitlabSection: some View {
+    @ViewBuilder private var soundOptions: some View {
+        ForEach(Prefs.soundNames, id: \.self) { Text($0).tag($0) }
+    }
+}
+
+/// Раздел GitLab или GitHub: у каждого свои хост, токен, интервал и уведомления.
+private struct ForgeSection: View {
+    @ObservedObject var store: MergeRequestStore
+    let server: ForgeServer
+    let sound: Bool
+
+    @AppStorage private var enabled: Bool
+    @AppStorage private var host: String
+    @AppStorage private var interval: Double
+    @AppStorage private var notifyReview: Bool
+    @AppStorage private var notifyFailed: Bool
+    @AppStorage private var notifyReady: Bool
+    @AppStorage private var eventSound: String
+    @State private var token = ""
+
+    init(store: MergeRequestStore, server: ForgeServer, sound: Bool) {
+        self.store = store
+        self.server = server
+        self.sound = sound
+        let f = server.forge
+        _enabled = AppStorage(wrappedValue: true, Prefs.Key.enabled(f))
+        _host = AppStorage(wrappedValue: f.defaultHost, Prefs.Key.host(f))
+        _interval = AppStorage(wrappedValue: 120.0, Prefs.Key.interval(f))
+        _notifyReview = AppStorage(wrappedValue: true, Prefs.Key.notifyReview(f))
+        _notifyFailed = AppStorage(wrappedValue: true, Prefs.Key.notifyFailed(f))
+        _notifyReady = AppStorage(wrappedValue: true, Prefs.Key.notifyReady(f))
+        _eventSound = AppStorage(wrappedValue: "Ping", Prefs.Key.eventSound(f))
+    }
+
+    private var forge: Forge { server.forge }
+
+    var body: some View {
         Section {
-            Toggle(L("Show my merge requests in the notch", "Показывать мои merge requests в челке"), isOn: $gitlabEnabled)
-                .onChange(of: gitlabEnabled) { _, _ in
-                    gitlab.configurationChanged()
-                    gitlab.refresh()
+            Toggle(forge == .gitlab ? L("Show my merge requests in the notch", "Показывать мои merge requests в челке")
+                                    : L("Show my pull requests in the notch", "Показывать мои pull requests в челке"), isOn: $enabled)
+                .onChange(of: enabled) { _, _ in
+                    store.configurationChanged()
+                    store.refresh()
                 }
             Group {
-                TextField(L("Host", "Хост"), text: $gitlabHost, prompt: Text("https://gitlab.example.com"))
-                    .onChange(of: gitlabHost) { _, _ in gitlab.configurationChanged() }
-                    .onSubmit { gitlab.refresh() }
+                TextField(L("Host", "Хост"), text: $host, prompt: Text(forge == .gitlab ? "https://gitlab.example.com" : "https://github.com"))
+                    .onChange(of: host) { _, _ in store.configurationChanged() }
+                    .onSubmit { store.refresh() }
                 LabeledContent(L("Access token", "Токен доступа")) {
                     HStack {
-                        SecureField("", text: $gitlabToken, prompt: Text("glpat-…"))
+                        SecureField("", text: $token, prompt: Text(forge == .gitlab ? "glpat-…" : "ghp_… / github_pat_…"))
                             .labelsHidden()
-                            .onChange(of: gitlabToken) { _, value in
-                                if gitlabServer.setToken(value) { gitlab.configurationChanged() }
+                            .onChange(of: token) { _, value in
+                                if server.setToken(value) { store.configurationChanged() }
                             }
-                            .onSubmit { gitlab.refresh() }
-                        if let url = GitLab.normalizedHost(gitlabHost).map(tokenPageURL) {
+                            .onSubmit { store.refresh() }
+                        if let url = Forge.normalizedHost(host).map(tokenPageURL) {
                             Button(L("Create…", "Создать…")) { NSWorkspace.shared.open(url) }
-                                .help(L("Open the GitLab page for a new token with the api scope",
-                                        "Открыть в GitLab страницу нового токена со scope api"))
+                                .help(forge == .gitlab ? L("Open the GitLab page for a new token with the api scope",
+                                                           "Открыть в GitLab страницу нового токена со scope api")
+                                                       : L("Open the GitHub page for a new classic token with the repo scope",
+                                                           "Открыть в GitHub страницу нового classic-токена со scope repo"))
                         }
                     }
                 }
-                Picker(L("Refresh every", "Обновлять каждые"), selection: $gitlabInterval) {
+                Picker(L("Refresh every", "Обновлять каждые"), selection: $interval) {
                     Text(L("1 min", "1 мин")).tag(60.0)
                     Text(L("2 min", "2 мин")).tag(120.0)
                     Text(L("5 min", "5 мин")).tag(300.0)
@@ -209,64 +242,79 @@ struct SettingsView: View {
                 }
                 LabeledContent(L("Connection", "Подключение")) {
                     HStack {
-                        gitlabStatus
+                        status
                         Spacer()
-                        Button(L("Check", "Проверить")) { gitlab.refresh() }
-                            .disabled(!gitlab.isConfigured || gitlab.loading)
+                        Button(L("Check", "Проверить")) { store.refresh() }
+                            .disabled(!store.isConfigured || store.loading)
                     }
                 }
                 LabeledContent(L("Notify when", "Уведомлять, когда")) {
                     VStack(alignment: .leading) {
-                        Toggle(L("someone requests my review", "меня зовут на ревью"), isOn: $gitlabNotifyReview)
-                        Toggle(L("a pipeline fails in my MR", "в моём MR упал пайплайн"), isOn: $gitlabNotifyFailed)
-                        Toggle(L("my MR is ready to merge", "мой MR можно вливать"), isOn: $gitlabNotifyReady)
+                        Toggle(L("someone requests my review", "меня зовут на ревью"), isOn: $notifyReview)
+                        Toggle(forge == .gitlab ? L("a pipeline fails in my MR", "в моём MR упал пайплайн")
+                                                : L("checks fail in my PR", "в моём PR упали проверки"), isOn: $notifyFailed)
+                        Toggle(L("my \(forge.shortName) is ready to merge", "мой \(forge.shortName) можно вливать"), isOn: $notifyReady)
                     }
                 }
-                Picker(L("Sound", "Звук"), selection: $gitlabSound) { soundOptions }
-                    .disabled(!sound)
+                Picker(L("Sound", "Звук"), selection: $eventSound) {
+                    ForEach(Prefs.soundNames, id: \.self) { Text($0).tag($0) }
+                }
+                .disabled(!sound)
             }
-            .disabled(!gitlabEnabled)
+            .disabled(!enabled)
         } header: {
-            Text("GitLab")
+            Text(forge.title)
         } footer: {
-            Text(L("A personal access token: read_api is enough to see merge requests, api also lets you act on them. It is stored in the Keychain. "
-                   + "Notifications follow the Notifications and Do not disturb settings.",
-                   "Personal access token: для просмотра хватает read_api, со scope api можно ещё и действовать. Хранится в связке ключей. "
-                   + "Уведомления подчиняются разделам «Уведомления» и «Не беспокоить»."))
-                .foregroundStyle(.secondary)
+            Text(footer).foregroundStyle(.secondary)
         }
-        .onAppear { gitlabToken = gitlabServer.token }
+        .onAppear { token = server.token }
     }
 
-    @ViewBuilder private var gitlabStatus: some View {
-        if gitlab.loading {
+    private var footer: String {
+        let notifications = L("Notifications follow the Notifications and Do not disturb settings.",
+                              "Уведомления подчиняются разделам «Уведомления» и «Не беспокоить».")
+        switch forge {
+        case .gitlab:
+            return L("A personal access token: read_api is enough to see merge requests, api also lets you act on them. It is stored in the Keychain. ",
+                     "Personal access token: для просмотра хватает read_api, со scope api можно ещё и действовать. Хранится в связке ключей. ") + notifications
+        case .github:
+            return L("A classic token with the repo scope, or a fine-grained one with read and write access to pull requests, contents and actions. "
+                     + "github.com or your GitHub Enterprise Server. The token is stored in the Keychain. ",
+                     "Classic-токен со scope repo или fine-grained с доступом на чтение и запись к pull requests, contents и actions. "
+                     + "github.com или ваш GitHub Enterprise Server. Токен хранится в связке ключей. ") + notifications
+        }
+    }
+
+    @ViewBuilder private var status: some View {
+        if store.loading {
             ProgressView().controlSize(.small)
-        } else if let error = gitlab.error {
+        } else if let error = store.error {
             Text(error).foregroundStyle(.red).lineLimit(2)
-        } else if let s = gitlab.snapshot {
+        } else if let s = store.snapshot {
             VStack(alignment: .leading, spacing: 2) {
                 Label("@\(s.username)", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                if gitlab.canAct == false {
-                    Text(L("Read-only token: merge, approve and other actions need the api scope.",
-                           "Токен только для чтения: для merge, approve и других действий нужен scope api."))
+                if store.canAct == false {
+                    Text(forge == .gitlab ? L("Read-only token: merge, approve and other actions need the api scope.",
+                                              "Токен только для чтения: для merge, approve и других действий нужен scope api.")
+                                          : L("The token can't act: merge, approve and other actions need the repo scope.",
+                                              "Токену не хватает прав: для merge, approve и других действий нужен scope repo."))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
         } else {
-            Text(gitlab.isConfigured ? L("not checked yet", "ещё не проверено") : L("enter the host and token", "укажите хост и токен"))
+            Text(store.isConfigured ? L("not checked yet", "ещё не проверено") : L("enter the host and token", "укажите хост и токен"))
                 .foregroundStyle(.secondary)
         }
     }
 
     /// Страница создания токена с заполненными именем и scope.
     private func tokenPageURL(_ host: URL) -> URL {
-        var c = URLComponents(url: host.appendingPathComponent("-/user_settings/personal_access_tokens"), resolvingAgainstBaseURL: false)!
-        c.queryItems = [URLQueryItem(name: "name", value: "Peppap"), URLQueryItem(name: "scopes", value: "api")]
+        let path = forge == .gitlab ? "-/user_settings/personal_access_tokens" : "settings/tokens/new"
+        var c = URLComponents(url: host.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+        c.queryItems = forge == .gitlab
+            ? [URLQueryItem(name: "name", value: "Peppap"), URLQueryItem(name: "scopes", value: "api")]
+            : [URLQueryItem(name: "description", value: "Peppap"), URLQueryItem(name: "scopes", value: "repo")]
         return c.url!
-    }
-
-    @ViewBuilder private var soundOptions: some View {
-        ForEach(Prefs.soundNames, id: \.self) { Text($0).tag($0) }
     }
 }
 

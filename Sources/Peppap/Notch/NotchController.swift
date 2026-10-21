@@ -19,7 +19,7 @@ final class NotchController {
 
     let ui = NotchUIState()
     private(set) var store: SessionStore
-    private(set) var gitlab: GitLabStore
+    private(set) var forges: Forges
     private let updater: Updater
     private let panel: NotchPanel
     private let host: FirstMouseHostingView<AnyView>
@@ -29,15 +29,15 @@ final class NotchController {
     private var wasInside = false
     private var collapseWork: DispatchWorkItem?
     private var peeking = false
-    /// Пользователь сам смотрел GitLab — при закрытии события считаются просмотренными.
-    private var viewedGitLab = false
+    /// Сервисы, которые пользователь сам смотрел, — при закрытии их события считаются просмотренными.
+    private var viewed: Set<Forge> = []
     private var watchers: Set<AnyCancellable> = []
     /// Сценарий демо управляет челкой сам — наведение мыши игнорируется.
     var scripted = false
 
-    init(store: SessionStore, gitlab: GitLabStore, updater: Updater, actions: NotchActions) {
+    init(store: SessionStore, forges: Forges, updater: Updater, actions: NotchActions) {
         self.store = store
-        self.gitlab = gitlab
+        self.forges = forges
         self.updater = updater
         self.actions = actions
         panel = NotchPanel(contentRect: NSRect(origin: .zero, size: Self.panelSize),
@@ -81,8 +81,8 @@ final class NotchController {
         ui.$tab.combineLatest(ui.$isExpanded)
             .sink { [weak self] tab, expanded in
                 MainActor.assumeIsolated {
-                    guard let self, expanded, !self.peeking, tab.source == .gitlab else { return }
-                    self.viewedGitLab = true
+                    guard let self, expanded, !self.peeking, let forge = tab.forge else { return }
+                    self.viewed.insert(forge)
                 }
             }
             .store(in: &watchers)
@@ -100,14 +100,14 @@ final class NotchController {
     }
 
     /// Показывать другие данные (демо подставляет выдуманные сессии и merge requests).
-    func display(store: SessionStore, gitlab: GitLabStore) {
+    func display(store: SessionStore, forges: Forges) {
         self.store = store
-        self.gitlab = gitlab
+        self.forges = forges
         host.rootView = rootView()
     }
 
     private func rootView() -> AnyView {
-        AnyView(NotchView(store: store, gitlab: gitlab, ui: ui, updater: updater, actions: actions)
+        AnyView(NotchView(store: store, forges: forges, ui: ui, updater: updater, actions: actions)
             .frame(width: Self.panelSize.width, height: Self.panelSize.height, alignment: .top))
     }
 
@@ -142,7 +142,7 @@ final class NotchController {
                 .insetBy(dx: -8, dy: -8)
         }
         let pad = CGFloat(Prefs.hoverPadding)
-        let width = ui.notchWidth + (store.hasActivity || gitlab.hasAttention ? 2 * (CollapsedView.wing + 6) : 0)
+        let width = ui.notchWidth + (store.hasActivity || forges.hasAttention ? 2 * (CollapsedView.wing + 6) : 0)
         return NSRect(x: f.midX - width / 2 - pad, y: f.maxY - ui.notchHeight - pad * 0.8,
                       width: width + 2 * pad, height: ui.notchHeight + pad * 0.8)
     }
@@ -166,19 +166,14 @@ final class NotchController {
         }
     }
 
-    /// Что открыть: GitLab, если индикатор в свёрнутой челке показывает его, иначе сессии.
+    /// Что открыть: GitLab или GitHub, если индикатор в свёрнутой челке показывает его, иначе сессии.
     private func openingTab() -> NotchTab {
-        guard !store.hasActivity, let kind = gitlab.attentionKind else { return .sessions }
-        selectAttentionMR()
-        return kind.tab
+        guard !store.hasActivity, let top = forges.attentionStore, let kind = top.attentionKind else { return .sessions }
+        ui.selectedMR = top.snapshot?.all.first { top.attention[$0.id] == kind }?.id
+        return kind.tab(top.forge)
     }
 
-    private func selectAttentionMR() {
-        let list = gitlab.snapshot?.all ?? []
-        ui.selectedMR = list.first { gitlab.attention[$0.id] == gitlab.attentionKind }?.id
-    }
-
-    /// Ненадолго раскрыть челку (событие в сессии или в GitLab).
+    /// Ненадолго раскрыть челку (событие в сессии, GitLab или GitHub).
     func peek(for seconds: TimeInterval, tab: NotchTab = .sessions, mergeRequest: String? = nil) {
         guard !ui.isExpanded || peeking else { return }
         // Не уводить с запроса разрешения, который показывает челка.
@@ -230,10 +225,8 @@ final class NotchController {
     func collapse() {
         collapseWork?.cancel()
         peeking = false
-        if viewedGitLab {
-            viewedGitLab = false
-            gitlab.markSeen()
-        }
+        for forge in viewed { forges[forge].markSeen() }
+        viewed = []
         ui.isExpanded = false
         ui.pinned = false
         ui.selectedID = nil
@@ -269,14 +262,14 @@ final class NotchController {
             return true
         case 123, 124: // ← → — источники; в поле ввода стрелки двигают курсор
             if panel.firstResponder is NSTextView { return false }
-            let sources = NotchSource.visible(gitlab: gitlab.isConfigured)
+            let sources = NotchSource.visible(forges: forges.configured)
             let i = sources.firstIndex(of: ui.tab.source) ?? 0
             ui.select(sources[(i + (keyCode == 123 ? sources.count - 1 : 1)) % sources.count])
             return true
         default:
             break
         }
-        if ui.tab.source == .gitlab { return handleMergeRequestKey(keyCode: keyCode, chars: chars) }
+        if let forge = ui.tab.forge { return handleMergeRequestKey(forges[forge], keyCode: keyCode, chars: chars) }
         let sessions = store.visibleSessions
         let index = sessions.firstIndex { $0.id == ui.selectedID }
         switch keyCode {
@@ -301,8 +294,8 @@ final class NotchController {
         return true
     }
 
-    private func handleMergeRequestKey(keyCode: UInt16, chars: String?) -> Bool {
-        let list = (ui.tab == .review ? gitlab.snapshot?.review : gitlab.snapshot?.authored) ?? []
+    private func handleMergeRequestKey(_ store: MergeRequestStore, keyCode: UInt16, chars: String?) -> Bool {
+        let list = (ui.tab.isReview ? store.snapshot?.review : store.snapshot?.authored) ?? []
         let index = list.firstIndex { $0.id == ui.selectedMR }
         if keyCode == 125 || keyCode == 126 { ui.disarm() }
         switch keyCode {
@@ -316,12 +309,12 @@ final class NotchController {
             if let i = index { actions.openMergeRequest(list[i]) }
         default:
             if chars == "r" || chars == "к" {
-                gitlab.refresh()
+                store.refresh()
                 return true
             }
             guard let i = index, let chars,
-                  let action = gitlab.actions(for: list[i]).first(where: { $0.keys.contains(chars) }) else { return false }
-            if ui.confirm(action, on: list[i].id) { gitlab.perform(action, on: list[i]) }
+                  let action = store.actions(for: list[i]).first(where: { $0.keys.contains(chars) }) else { return false }
+            if ui.confirm(action, on: list[i].id) { store.perform(action, on: list[i]) }
         }
         return true
     }

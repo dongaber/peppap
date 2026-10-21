@@ -20,13 +20,13 @@ protocol StatusMenuDelegate: AnyObject {
 final class StatusMenu: NSObject, NSMenuDelegate {
     weak var delegate: StatusMenuDelegate?
     private let store: SessionStore
-    private let gitlab: GitLabStore
+    private let forges: Forges
     private let updater: Updater
     private let statusItem: NSStatusItem
 
-    init(store: SessionStore, gitlab: GitLabStore, updater: Updater) {
+    init(store: SessionStore, forges: Forges, updater: Updater) {
         self.store = store
-        self.gitlab = gitlab
+        self.forges = forges
         self.updater = updater
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
@@ -45,11 +45,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
         let n = store.sessions.count
         menu.addItem(withTitle: "Claude Code: " + (n == 0 ? L("no sessions", "нет сессий") : Fmt.sessions(n)), action: nil, keyEquivalent: "")
-        if gitlab.isConfigured {
-            let s = gitlab.snapshot
-            menu.addItem(withTitle: "GitLab: " + (s.map { L("\($0.authored.count) MR · \($0.review.count) to review", "\($0.authored.count) MR · \($0.review.count) на ревью") }
-                                                  ?? gitlab.error ?? L("loading…", "загрузка…")),
-                         action: nil, keyEquivalent: "")
+        for f in forges.all where f.isConfigured {
+            let name = f.forge.shortName
+            let line = f.snapshot.map { L("\($0.authored.count) \(name) · \($0.review.count) to review", "\($0.authored.count) \(name) · \($0.review.count) на ревью") }
+            menu.addItem(withTitle: f.forge.title + ": " + (line ?? f.error ?? L("loading…", "загрузка…")), action: nil, keyEquivalent: "")
         }
         if Prefs.hotkey != .off {
             add(menu, L("Open the notch", "Открыть челку") + " (\(Prefs.hotkey.title))", #selector(menuOpenNotch))

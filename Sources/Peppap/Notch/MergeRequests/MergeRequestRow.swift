@@ -3,23 +3,23 @@ import SwiftUI
 struct MergeRequestRow: View {
     let mr: MergeRequest
     /// Непросмотренное событие по этому MR.
-    let event: GitLab.Event.Kind?
+    let event: Forge.Event.Kind?
     let approvedByMe: Bool
     let selected: Bool
-    @ObservedObject var gitlab: GitLabStore
+    @ObservedObject var store: MergeRequestStore
     @ObservedObject var ui: NotchUIState
     let open: () -> Void
     @State private var hover = false
 
-    private var available: [MergeRequestAction] { gitlab.actions(for: mr) }
-    private var running: MergeRequestAction? { gitlab.running[mr.id] }
+    private var available: [MergeRequestAction] { store.actions(for: mr) }
+    private var running: MergeRequestAction? { store.running[mr.id] }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             summary
             // Кнопки — при наведении или выборе с клавиатуры, пока идёт действие и пока видна его ошибка.
             let buttons = available.filter(\.isPrimary)
-            let error = gitlab.actionErrors[mr.id]
+            let error = store.actionErrors[mr.id]
             if (hover || selected || running != nil) && !buttons.isEmpty || error != nil {
                 actionBar(buttons, error: error)
             }
@@ -34,7 +34,7 @@ struct MergeRequestRow: View {
         .contentShape(Rectangle())
         .onHover { hover = $0 }
         .onTapGesture(perform: open)
-        .help(mr.project + "!" + mr.iid)
+        .help(mr.project + mr.forge.referenceMark + mr.iid)
         .contextMenu {
             Button(L("Open in browser", "Открыть в браузере"), action: open)
             Button(L("Copy link", "Скопировать ссылку")) {
@@ -45,7 +45,7 @@ struct MergeRequestRow: View {
                 Divider()
                 // В меню нажатие и есть подтверждение: оно открывается и выбирается осознанно.
                 ForEach(available, id: \.self) { a in
-                    Button(a.title + (a.needsConfirmation ? "…" : "")) { gitlab.perform(a, on: mr) }
+                    Button(a.title(mr.forge) + (a.needsConfirmation ? "…" : "")) { store.perform(a, on: mr) }
                         .disabled(running != nil)
                 }
             }
@@ -57,7 +57,7 @@ struct MergeRequestRow: View {
             ForEach(buttons, id: \.self) { a in
                 let armed = ui.isArmed(a, on: mr.id)
                 Button {
-                    if ui.confirm(a, on: mr.id) { gitlab.perform(a, on: mr) }
+                    if ui.confirm(a, on: mr.id) { store.perform(a, on: mr) }
                 } label: {
                     HStack(spacing: 4) {
                         if running == a {
@@ -65,12 +65,12 @@ struct MergeRequestRow: View {
                         } else {
                             Image(systemName: a.symbol).font(.system(size: 9, weight: .bold))
                         }
-                        Text(armed ? a.shortTitle + "?" : a.shortTitle)
+                        Text(armed ? a.shortTitle(mr.forge) + "?" : a.shortTitle(mr.forge))
                     }
                 }
                 .buttonStyle(NotchButtonStyle(prominent: armed || a == .merge))
                 .disabled(running != nil)
-                .help(armed ? L("Click again to confirm", "Нажмите ещё раз, чтобы подтвердить") : a.title)
+                .help(armed ? L("Click again to confirm", "Нажмите ещё раз, чтобы подтвердить") : a.title(mr.forge))
             }
             if let error {
                 Text(error)
@@ -85,7 +85,7 @@ struct MergeRequestRow: View {
 
     private var summary: some View {
         HStack(spacing: 10) {
-            PipelineIcon(pipeline: mr.pipeline).frame(width: 18)
+            PipelineIcon(pipeline: mr.pipeline, forge: mr.forge).frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     if let event {
@@ -104,7 +104,7 @@ struct MergeRequestRow: View {
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 3) {
-                Text(mr.status.label)
+                Text(mr.statusLabel)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(color(mr.status))
                 HStack(spacing: 4) {
@@ -114,7 +114,8 @@ struct MergeRequestRow: View {
                     }
                     if mr.autoMerge {
                         Chip(icon: "clock.arrow.circlepath", text: L("auto", "авто"))
-                            .help(L("Merges when the pipeline succeeds", "Вольётся, когда пройдёт пайплайн"))
+                            .help(mr.forge == .gitlab ? L("Merges when the pipeline succeeds", "Вольётся, когда пройдёт пайплайн")
+                                                      : L("Merges when the checks pass", "Вольётся, когда пройдут проверки"))
                     }
                     if mr.notes > 0 {
                         Chip(icon: "bubble.left", text: "\(mr.notes)")
@@ -145,6 +146,7 @@ struct MergeRequestRow: View {
 
 private struct PipelineIcon: View {
     let pipeline: MergeRequest.Pipeline?
+    let forge: Forge
 
     var body: some View {
         Image(systemName: symbol)
@@ -174,6 +176,15 @@ private struct PipelineIcon: View {
     }
 
     private var help: String {
+        if forge == .github {
+            switch pipeline {
+            case .success: return L("Checks passed", "Проверки прошли")
+            case .failed: return L("Checks failed", "Проверки упали")
+            case .running: return L("Checks running", "Идут проверки")
+            case .canceled, .manual: return L("Checks canceled", "Проверки отменены")
+            case nil: return L("No checks", "Без проверок")
+            }
+        }
         switch pipeline {
         case .success: return L("Pipeline passed", "Пайплайн прошёл")
         case .failed: return L("Pipeline failed", "Пайплайн упал")

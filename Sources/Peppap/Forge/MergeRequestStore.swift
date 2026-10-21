@@ -2,17 +2,17 @@ import Foundation
 
 /// Список MR: обновляется по таймеру и при открытии вкладки.
 @MainActor
-final class GitLabStore: ObservableObject {
-    @Published private(set) var snapshot: GitLab.Snapshot?
+final class MergeRequestStore: ObservableObject {
+    @Published private(set) var snapshot: Forge.Snapshot?
     @Published private(set) var error: String?
     @Published private(set) var loading = false
     @Published private(set) var lastUpdate: Date?
-    /// Источник GitLab показывается, только если всё настроено.
+    /// Источник показывается в челке, только если всё настроено.
     @Published private(set) var isConfigured = false
     /// Непросмотренные события по id MR — для индикатора в свёрнутой челке и отметки в списке.
-    @Published private(set) var attention: [String: GitLab.Event.Kind] = [:]
+    @Published private(set) var attention: [String: Forge.Event.Kind] = [:]
     /// События очередного обновления (уже отфильтрованные по настройкам).
-    var onEvents: (([GitLab.Event]) -> Void)?
+    var onEvents: (([Forge.Event]) -> Void)?
     /// Действия, которые выполняются сейчас (по id MR).
     @Published private(set) var running: [String: MergeRequestAction] = [:]
     /// Ошибка последнего действия по id MR; через несколько секунд пропадает.
@@ -22,11 +22,12 @@ final class GitLabStore: ObservableObject {
     /// MR, с которыми только что что-то сделали: их изменения — не повод для уведомления.
     private var acted: Set<String> = []
 
-    let source: GitLabSource
+    let source: MergeRequestSource
+    var forge: Forge { source.forge }
     private var timer: Timer?
     private var generation = 0
 
-    init(source: GitLabSource) {
+    init(source: MergeRequestSource) {
         self.source = source
         isConfigured = source.isConfigured
     }
@@ -35,7 +36,10 @@ final class GitLabStore: ObservableObject {
         refresh()
         // Раз в 30 секунд проверяем, не устарели ли данные: так смена интервала в настройках действует сразу.
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshIfStale(maxAge: Prefs.gitlabInterval) }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.refreshIfStale(maxAge: Prefs.interval(self.forge))
+            }
         }
     }
 
@@ -65,7 +69,7 @@ final class GitLabStore: ObservableObject {
         let gen = generation
         if canAct == nil { checkScopes(generation: gen) }
         Task {
-            let result: Result<GitLab.Snapshot, Error>
+            let result: Result<Forge.Snapshot, Error>
             do { result = .success(try await source.fetch()) } catch { result = .failure(error) }
             guard gen == generation else { return } // настройки сменились, пока шёл запрос
             loading = false
@@ -80,9 +84,9 @@ final class GitLabStore: ObservableObject {
     }
 
     /// Новый список: события относительно прошлого, без событий при первой загрузке.
-    func apply(_ s: GitLab.Snapshot) {
-        let events = snapshot.map { GitLab.events(from: $0, to: s) }?
-            .filter { Prefs.gitlabNotifies($0.kind) && !acted.contains($0.mr.id) } ?? []
+    func apply(_ s: Forge.Snapshot) {
+        let events = snapshot.map { Forge.events(from: $0, to: s) }?
+            .filter { Prefs.notifies($0.kind, forge: forge) && !acted.contains($0.mr.id) } ?? []
         acted = []
         snapshot = s
         error = nil
@@ -94,7 +98,7 @@ final class GitLabStore: ObservableObject {
 
     // MARK: - Действия
 
-    /// Действия, доступные с этим MR: по правам в GitLab и scope токена.
+    /// Действия, доступные с этим MR: по правам на сервере и scope токена.
     func actions(for mr: MergeRequest) -> [MergeRequestAction] {
         guard canAct != false, let me = snapshot?.username else { return [] }
         return MergeRequestAction.allCases.filter { $0.isAvailable(for: mr, me: me) }
@@ -117,7 +121,7 @@ final class GitLabStore: ObservableObject {
             }
             acted.insert(mr.id)
             update(mr.id) { action.applied(to: $0, me: self.snapshot?.username ?? "") }
-            // GitLab применяет часть изменений асинхронно (merge, rebase, пайплайн) — перечитываем чуть позже.
+            // Сервер применяет часть изменений асинхронно (merge, rebase, пайплайн) — перечитываем чуть позже.
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.refresh() }
         }
     }
@@ -138,10 +142,10 @@ final class GitLabStore: ObservableObject {
 
     private func checkScopes(generation gen: Int) {
         Task {
-            let scopes = await source.tokenScopes()
+            let can = await source.tokenCanAct()
             guard gen == generation else { return }
             // Не удалось узнать — показываем действия, ошибку покажет само действие.
-            canAct = scopes.map { $0.contains("api") } ?? true
+            canAct = can ?? true
         }
     }
 
@@ -150,7 +154,7 @@ final class GitLabStore: ObservableObject {
     }
 
     var hasAttention: Bool { !attention.isEmpty }
-    var attentionKind: GitLab.Event.Kind? { attention.values.max() }
+    var attentionKind: Forge.Event.Kind? { attention.values.max() }
 
     /// Короткая сводка для заголовка вкладки.
     var summary: String {

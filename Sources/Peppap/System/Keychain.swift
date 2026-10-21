@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-/// Секреты (токен GitLab) — в связке ключей, а не в UserDefaults.
+/// Секреты (токены GitLab и GitHub) — в связке ключей, а не в UserDefaults.
 enum Keychain {
     static let service = "com.peppap.notch"
 

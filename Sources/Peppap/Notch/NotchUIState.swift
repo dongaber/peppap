@@ -3,40 +3,52 @@ import SwiftUI
 
 /// Откуда данные: переключатель в левом крыле раскрытой челки.
 enum NotchSource: Int, CaseIterable {
-    case claude, gitlab
+    case claude, gitlab, github
 
-    var title: String {
+    init(_ forge: Forge) { self = forge == .gitlab ? .gitlab : .github }
+
+    var forge: Forge? {
         switch self {
-        case .claude: return "Claude"
-        case .gitlab: return "GitLab"
+        case .claude: return nil
+        case .gitlab: return .gitlab
+        case .github: return .github
         }
     }
+
+    var title: String { forge?.title ?? "Claude" }
 
     var symbol: String {
         switch self {
         case .claude: return "asterisk"
         case .gitlab: return "arrow.triangle.merge"
+        case .github: return "arrow.triangle.pull"
         }
     }
 
     var tabs: [NotchTab] { NotchTab.allCases.filter { $0.source == self } }
 
-    /// GitLab — только когда он настроен.
-    static func visible(gitlab: Bool) -> [NotchSource] {
-        gitlab ? allCases : [.claude]
+    /// GitLab и GitHub — только когда они настроены.
+    static func visible(forges: [Forge]) -> [NotchSource] {
+        allCases.filter { $0.forge.map(forges.contains) ?? true }
     }
 }
 
 /// Подвкладки источников: строка под челкой.
-enum NotchTab: Int, CaseIterable {
-    case sessions, today, week, mine, review
+enum NotchTab: Hashable, CaseIterable {
+    case sessions, today, week, mine(Forge), review(Forge)
 
-    var source: NotchSource {
+    static var allCases: [NotchTab] { [.sessions, .today, .week] + Forge.allCases.flatMap { [.mine($0), .review($0)] } }
+
+    var forge: Forge? {
         switch self {
-        case .sessions, .today, .week: return .claude
-        case .mine, .review: return .gitlab
+        case .sessions, .today, .week: return nil
+        case .mine(let f), .review(let f): return f
         }
     }
+
+    var source: NotchSource { forge.map(NotchSource.init) ?? .claude }
+
+    var isReview: Bool { if case .review = self { return true } else { return false } }
 
     var title: String {
         switch self {

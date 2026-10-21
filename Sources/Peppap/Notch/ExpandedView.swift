@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ExpandedView: View {
     @ObservedObject var store: SessionStore
-    @ObservedObject var gitlab: GitLabStore
+    @ObservedObject var forges: Forges
     @ObservedObject var ui: NotchUIState
     @ObservedObject var updater: Updater
     let actions: NotchActions
@@ -13,8 +13,13 @@ struct ExpandedView: View {
     /// Ширина «крыла» слева и справа от аппаратной челки: содержимое верхней строки не заходит под неё.
     private var wing: CGFloat { (Self.width(notch: ui.notchWidth) - 2 * Self.padding - ui.notchWidth - 12) / 2 }
 
-    /// Вкладка выключенного источника (GitLab без настроек) не показывается.
-    private var tab: NotchTab { ui.tab.source == .gitlab && !gitlab.isConfigured ? .sessions : ui.tab }
+    /// Вкладка выключенного источника (GitLab или GitHub без настроек) не показывается.
+    private var tab: NotchTab {
+        if let f = ui.tab.forge, !forges[f].isConfigured { return .sessions }
+        return ui.tab
+    }
+    /// Стор открытого сервиса; nil на вкладках Claude.
+    private var forge: MergeRequestStore? { tab.forge.map { forges[$0] } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -39,7 +44,7 @@ struct ExpandedView: View {
                     TabButton(title: title(t), selected: tab == t) { ui.tab = t }
                 }
                 Spacer(minLength: 8)
-                if tab.source == .gitlab { GitLabStatus(gitlab: gitlab) }
+                if let forge { ForgeStatus(store: forge) }
             }
             .padding(.top, -4)
 
@@ -47,7 +52,7 @@ struct ExpandedView: View {
             case .sessions: sessionsTab
             case .today: TodayTab(store: store)
             case .week: WeekTab(store: store)
-            case .mine, .review: MergeRequestsTab(gitlab: gitlab, ui: ui, tab: tab, actions: actions)
+            case .mine(let f), .review(let f): MergeRequestsTab(store: forges[f], ui: ui, tab: tab, actions: actions)
             }
 
             if ui.pinned {
@@ -60,16 +65,16 @@ struct ExpandedView: View {
 
     private func sourceButtons(compact: Bool) -> some View {
         HStack(spacing: 2) {
-            ForEach(NotchSource.visible(gitlab: gitlab.isConfigured), id: \.self) { source in
+            ForEach(NotchSource.visible(forges: forges.configured), id: \.self) { source in
                 SourceButton(source: source, selected: tab.source == source, compact: compact,
-                             badge: source == .gitlab ? gitlab.attentionKind?.color : nil) { ui.select(source) }
+                             badge: source.forge.flatMap { forges[$0].attentionKind?.color }) { ui.select(source) }
             }
         }
         .fixedSize()
     }
 
     private func title(_ t: NotchTab) -> String {
-        guard let s = gitlab.snapshot else { return t.title }
+        guard let s = t.forge.flatMap({ forges[$0].snapshot }) else { return t.title }
         switch t {
         case .mine: return t.title + " \(s.authored.count)"
         case .review: return t.title + " \(s.review.count)"
@@ -108,7 +113,7 @@ struct ExpandedView: View {
     }
 
     private var summary: String {
-        if tab.source == .gitlab { return gitlab.summary }
+        if let forge { return forge.summary }
         let working = store.visibleSessions.filter { $0.phase == .working }.count
         let total = store.visibleSessions.count
         if total == 0 { return L("no sessions", "нет сессий") }
@@ -117,11 +122,11 @@ struct ExpandedView: View {
 
     private var hint: String {
         let base = L("↑↓ select · ⏎ open · Tab tabs · Esc close", "↑↓ выбор · ⏎ перейти · Tab вкладки · Esc закрыть")
-        let sources = gitlab.isConfigured ? L(" · ←→ source", " · ←→ источник") : ""
-        if tab.source == .gitlab {
-            let list = (tab == .review ? gitlab.snapshot?.review : gitlab.snapshot?.authored) ?? []
+        let sources = forges.configured.isEmpty ? "" : L(" · ←→ source", " · ←→ источник")
+        if let forge {
+            let list = (tab.isReview ? forge.snapshot?.review : forge.snapshot?.authored) ?? []
             let keys = list.first { $0.id == ui.selectedMR }.map { mr in
-                gitlab.actions(for: mr).map { $0.keys[0].uppercased() + " " + $0.shortTitle.lowercased() + " · " }.joined()
+                forge.actions(for: mr).map { $0.keys[0].uppercased() + " " + $0.shortTitle(mr.forge).lowercased() + " · " }.joined()
             } ?? ""
             return keys + L("R refresh · ", "R обновить · ") + base + sources
         }

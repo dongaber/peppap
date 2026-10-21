@@ -1,7 +1,7 @@
 import Foundation
 
 extension GitLab {
-    static func parse(_ data: Data) throws -> Snapshot {
+    static func parse(_ data: Data) throws -> Forge.Snapshot {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw GitLabError.badResponse }
         let user = (json["data"] as? [String: Any])?["currentUser"] as? [String: Any]
         if user == nil, let errors = json["errors"] as? [[String: Any]], let message = errors.first?["message"] as? String {
@@ -16,7 +16,7 @@ extension GitLab {
         }
         let mine = Set(authored.map(\.id))
         let review = nodes(user["review"]).compactMap(mergeRequest).filter { !mine.contains($0.id) }
-        return Snapshot(username: username, authored: authored, review: review)
+        return Forge.Snapshot(username: username, authored: authored, review: review)
     }
 
     private static func nodes(_ connection: Any?) -> [[String: Any]] {
@@ -49,10 +49,12 @@ extension GitLab {
         mr.squash = n["squashOnMerge"] as? Bool ?? false
         mr.removeSourceBranch = n["shouldRemoveSourceBranch"] as? Bool ?? n["forceRemoveSourceBranch"] as? Bool ?? false
         mr.autoMerge = n["autoMergeEnabled"] as? Bool ?? false
-        mr.pipelineID = head?["id"] as? String
+        mr.pipelineIDs = (head?["id"] as? String).map { [$0] } ?? []
         mr.can = MergeRequest.Permissions(
             approve: perms?["canApprove"] as? Bool ?? false,
+            unapprove: true,
             merge: perms?["canMerge"] as? Bool ?? false,
+            autoMerge: perms?["canMerge"] as? Bool ?? false,
             update: perms?["updateMergeRequest"] as? Bool ?? false,
             pushToSourceBranch: perms?["pushToSourceBranch"] as? Bool ?? false,
             retryPipeline: (head?["userPermissions"] as? [String: Any])?["updatePipeline"] as? Bool ?? false

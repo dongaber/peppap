@@ -37,7 +37,7 @@ struct NotchActions {
 
 struct NotchView: View {
     @ObservedObject var store: SessionStore
-    @ObservedObject var gitlab: GitLabStore
+    @ObservedObject var forges: Forges
     @ObservedObject var ui: NotchUIState
     @ObservedObject var updater: Updater
     let actions: NotchActions
@@ -45,7 +45,7 @@ struct NotchView: View {
     /// Смена языка пересобирает интерфейс целиком.
     @AppStorage(Prefs.Key.language) private var language = AppLanguage.system.rawValue
 
-    private var hasActivity: Bool { store.hasActivity || gitlab.hasAttention }
+    private var hasActivity: Bool { store.hasActivity || forges.hasAttention }
     private var ear: CGFloat { ui.isExpanded ? 12 : (hasActivity ? 6 : 0) }
 
     var body: some View {
@@ -66,7 +66,7 @@ struct NotchView: View {
 
     @ViewBuilder private var content: some View {
         if ui.isExpanded {
-            ExpandedView(store: store, gitlab: gitlab, ui: ui, updater: updater, actions: actions)
+            ExpandedView(store: store, forges: forges, ui: ui, updater: updater, actions: actions)
                 .frame(width: ExpandedView.width(notch: ui.notchWidth))
                 // Фигура растягивается пружиной, содержимое проявляется чуть позже и быстро гаснет при закрытии.
                 .transition(.asymmetric(
@@ -74,7 +74,7 @@ struct NotchView: View {
                     removal: .opacity.animation(.easeIn(duration: 0.1))
                 ))
         } else {
-            CollapsedView(store: store, gitlab: gitlab, ui: ui)
+            CollapsedView(store: store, forges: forges, ui: ui)
                 .transition(.asymmetric(
                     insertion: .opacity.animation(.easeOut(duration: 0.18).delay(0.12)),
                     removal: .opacity.animation(.easeIn(duration: 0.08))

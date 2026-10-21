@@ -34,8 +34,9 @@ let gitlabActionTests: [(String, @MainActor () throws -> Void)] = [
         expectEqual(mr.sha, "abc123")
         expect(mr.squash)
         expect(mr.removeSourceBranch) // shouldRemoveSourceBranch не задан — берём forceRemoveSourceBranch
-        expectEqual(mr.pipelineID, "gid://gitlab/Ci::Pipeline/42")
-        expectEqual(mr.can, MergeRequest.Permissions(approve: true, merge: true, update: true, pushToSourceBranch: true, retryPipeline: true))
+        expectEqual(mr.pipelineIDs, ["gid://gitlab/Ci::Pipeline/42"])
+        expectEqual(mr.can, MergeRequest.Permissions(approve: true, unapprove: true, merge: true, autoMerge: true, update: true,
+                                                     pushToSourceBranch: true, retryPipeline: true))
         expect(!(try actionMR(mine: false)).mine)
     }),
     ("какие действия доступны", {
@@ -121,8 +122,8 @@ let gitlabActionTests: [(String, @MainActor () throws -> Void)] = [
     }),
     ("стор поверх источника: загрузка и действие", {
         let mr = try actionMR(mine: false)
-        let source = DemoGitLab(GitLab.Snapshot(username: "me", authored: [], review: [mr]), latency: 0)
-        let store = GitLabStore(source: source)
+        let source = DemoForge(Forge.Snapshot(username: "me", authored: [], review: [mr]), latency: 0)
+        let store = MergeRequestStore(source: source)
         expect(store.isConfigured)
         store.refresh()
         waitUntil { store.snapshot != nil && store.canAct != nil }

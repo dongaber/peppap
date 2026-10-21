@@ -12,8 +12,9 @@ final class DemoRecorder {
     private(set) var isRunning = false
     /// Выдуманные данные: создаются на время сценария, настоящие сторы его не замечают.
     private var store: SessionStore!
-    private var gitlab: GitLabStore!
-    private var gitlabSource: DemoGitLab!
+    private var forges: Forges!
+    private var gitlabSource: DemoForge!
+    private var gitlab: MergeRequestStore { forges.gitlab }
 
     init(notch: NotchController) {
         self.notch = notch
@@ -40,10 +41,10 @@ final class DemoRecorder {
         if let language { defaults.set(language.rawValue, forKey: L10n.key) }
         let screen = NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main ?? NSScreen.screens[0]
         showBackdrop(on: screen)
-        let real = (store: notch.store, gitlab: notch.gitlab)
+        let real = (store: notch.store, forges: notch.forges)
         makeFakeState()
         notch.collapse()
-        notch.display(store: store, gitlab: gitlab)
+        notch.display(store: store, forges: forges)
         notch.scripted = true
 
         var process: Process?
@@ -69,9 +70,9 @@ final class DemoRecorder {
             guard let self else { return }
             self.notch.scripted = false
             self.notch.collapse()
-            self.notch.display(store: real.store, gitlab: real.gitlab)
+            self.notch.display(store: real.store, forges: real.forges)
             self.store = nil
-            self.gitlab = nil
+            self.forges = nil
             self.gitlabSource = nil
             if language != nil { defaults.set(previousLanguage, forKey: L10n.key) }
             self.backdrop?.orderOut(nil)
@@ -139,13 +140,14 @@ final class DemoRecorder {
                              fiveHour: StatusInfo.Limit(percent: 42, resetsAt: now.addingTimeInterval(2 * 3600 + 900)),
                              sevenDay: StatusInfo.Limit(percent: 18, resetsAt: now.addingTimeInterval(4 * 86400)))
         store.hooksInstalled = true // без баннера «Подключите hooks»
-        gitlabSource = DemoGitLab(Self.gitlabSnapshot(later: false))
-        gitlab = GitLabStore(source: gitlabSource)
+        gitlabSource = DemoForge(Self.gitlabSnapshot(later: false))
+        // GitHub в демо не подключён: пустой токен — без обращения к связке ключей.
+        forges = Forges(gitlab: MergeRequestStore(source: gitlabSource), github: MergeRequestStore(source: ForgeServer(.github, token: "")))
         gitlab.refresh()
     }
 
     /// Выдуманные merge requests. `later` — следующее «обновление»: пайплайн прошёл, позвали на ревью.
-    static func gitlabSnapshot(later: Bool) -> GitLab.Snapshot {
+    static func gitlabSnapshot(later: Bool) -> Forge.Snapshot {
         func mr(_ iid: String, _ title: String, project: String, author: String? = nil, mine: Bool, status: String,
                 pipeline: MergeRequest.Pipeline?, draft: Bool = false, approvedBy: [String] = [], notes: Int = 0,
                 minutesAgo: Double) -> MergeRequest {
@@ -154,8 +156,9 @@ final class DemoRecorder {
                                  updatedAt: Date().addingTimeInterval(-minutesAgo * 60), conflicts: false, mergeStatus: status,
                                  discussionsResolved: true, pipeline: pipeline, notes: notes, approvedBy: approvedBy)
             m.sha = "demo"
-            m.pipelineID = pipeline == nil ? nil : "gid://gitlab/Ci::Pipeline/\(iid)"
-            m.can = MergeRequest.Permissions(approve: true, merge: true, update: true, pushToSourceBranch: true, retryPipeline: true)
+            m.pipelineIDs = pipeline == nil ? [] : ["gid://gitlab/Ci::Pipeline/\(iid)"]
+            m.can = MergeRequest.Permissions(approve: true, unapprove: true, merge: true, autoMerge: true, update: true,
+                                             pushToSourceBranch: true, retryPipeline: true)
             return m
         }
         let theme = later
@@ -169,7 +172,7 @@ final class DemoRecorder {
             review.insert(mr("12", "Make the header responsive", project: "acme/landing", author: "oleg", mine: false,
                              status: "NOT_APPROVED", pipeline: .success, notes: 1, minutesAgo: 0.5), at: 0)
         }
-        return GitLab.Snapshot(username: "alex", authored: [
+        return Forge.Snapshot(username: "alex", authored: [
             theme,
             mr("88", "Fix the flaky auth snapshot test", project: "acme/api-server", mine: true, status: "CI_MUST_PASS",
                pipeline: .failed, notes: 2, minutesAgo: 65),
@@ -277,9 +280,9 @@ final class DemoRecorder {
             // GitLab: пока сессии ничего не делают, свёрнутая челка показывает новые события.
             (43.0, { self.store.markSeen(a); self.store.markSeen(b) }),
             (44.0, { self.gitlabSource.snapshot = Self.gitlabSnapshot(later: true); self.gitlab.refresh() }),
-            (46.5, { self.notch.show(tab: .review, mergeRequest: self.demoMR("12")?.id) }),
+            (46.5, { self.notch.show(tab: .review(.gitlab), mergeRequest: self.demoMR("12")?.id) }),
             (48.5, { if let mr = self.demoMR("12") { self.gitlab.perform(.approve, on: mr) } }),
-            (50.5, { self.notch.show(tab: .mine, mergeRequest: self.demoMR("214")?.id) }),
+            (50.5, { self.notch.show(tab: .mine(.gitlab), mergeRequest: self.demoMR("214")?.id) }),
             (52.0, { if let mr = self.demoMR("214") { _ = self.notch.ui.confirm(.merge, on: mr.id) } }),
             (53.5, { if let mr = self.demoMR("214"), self.notch.ui.confirm(.merge, on: mr.id) { self.gitlab.perform(.merge, on: mr) } }),
             (56.0, { self.notch.collapse() }),
