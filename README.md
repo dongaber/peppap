@@ -1,6 +1,6 @@
 # Peppap
 
-Your dev status in the MacBook notch: Claude Code sessions, GitLab merge requests and more.
+Your dev status in the MacBook notch: Claude Code sessions, GitLab merge requests, GitHub pull requests and more.
 
 ![Peppap: Claude Code sessions and GitLab merge requests in the notch](docs/demo.gif)
 
@@ -19,7 +19,7 @@ Your dev status in the MacBook notch: Claude Code sessions, GitLab merge request
 
 ## Features
 
-The expanded notch has a source switch next to the notch (Claude · GitLab) and the source's tabs below it.
+The expanded notch has a source switch next to the notch (Claude · GitLab · GitHub) and the source's tabs below it. GitLab and GitHub show up once you enter a token for them.
 
 ### Claude Code
 
@@ -42,6 +42,13 @@ The expanded notch has a source switch next to the notch (Claude · GitLab) and 
 - **Act without the browser:** approve or revoke, merge (or merge when the pipeline succeeds), retry a failed pipeline, rebase, mark as ready or draft. Buttons appear on the row you hover or select; merge asks for a second click. Only the actions GitLab allows you are shown.
 - **Notifications** when someone requests your review, a pipeline fails in your MR, or your MR becomes ready to merge. While Claude is idle, the collapsed notch shows a merge icon with the number of new events.
 - Works with self-hosted GitLab (CE or EE). The token is kept in the Keychain: `read_api` is enough to look, `api` also enables the actions.
+
+### GitHub
+
+- The same **Mine and Review** tabs for pull requests: yours and the ones where you or your team are asked to review, with check status, approvals, comments and what blocks the merge.
+- **Actions:** approve, merge with the repository's default method (or enable auto-merge while checks run), re-run failed GitHub Actions jobs, rebase on the base branch, mark as ready or draft. GitHub doesn't let you revoke your own approval, so there is no Revoke.
+- **Notifications** for review requests, failed checks and PRs that became ready to merge, as with GitLab.
+- Works with github.com and GitHub Enterprise Server. The token is kept in the Keychain.
 
 ### Everywhere
 
@@ -80,6 +87,12 @@ The ✦ menu also has: sound toggle, settings, weekly report export, demo, demo 
 2. Enter your GitLab host (e.g. `https://gitlab.example.com`) and the token in Settings → GitLab. The token is stored in the Keychain.
 3. **GitLab** appears next to **Claude** in the expanded notch. The lists refresh every 2 minutes (configurable) and when you open them; press R to refresh, ⏎ or click to open an MR. Choose which events notify you in the same Settings section.
 
+### GitHub
+
+1. Create a token (Settings → GitHub → **Create…** opens the page): a classic token with the `repo` scope, or a fine-grained one with read and write access to Pull requests, Contents and Actions in the repositories you need.
+2. Enter it in Settings → GitHub. The host is `https://github.com`; change it for GitHub Enterprise Server.
+3. **GitHub** appears in the source switch, with the same tabs, keys and notification settings as GitLab.
+
 ## Building from source
 
 ```sh
@@ -114,7 +127,8 @@ Sources live in `Sources/Peppap/`, grouped by area:
 |---|---|
 | `App/` | entry point, app delegate, menu bar menu (`StatusMenu`), debug commands of the local server, defaults (`Prefs`), English and Russian strings (`L10n`), global hotkey |
 | `Claude/` | Claude Code sessions: hook and status line scripts (`HookInstaller`), local HTTP server for hook events (`EventServer`), hook event parsing, session state and permissions (`SessionStore`), running `claude` processes and transcripts, tokens and cost (`ClaudeMonitor`, `UsageScanner`), change preview, task history and weekly report |
-| `GitLab/` | merge requests: model, actions, API client and GraphQL parser, `GitLabStore` on top of a `GitLabSource` (the server from the settings or demo data) |
+| `Forge/` | what GitLab and GitHub share: the merge request model and actions, change events, `MergeRequestStore` on top of a `MergeRequestSource` (`ForgeServer` from the settings or demo data), `Forges` with both stores |
+| `GitLab/`, `GitHub/` | API clients and GraphQL parsers; GitHub states are mapped to the GitLab merge statuses the model uses |
 | `Notch/` | the notch panel (`NotchController`: hover, auto-expand, keyboard) and its SwiftUI interface: `Sessions/`, `Stats/` (today and week), `MergeRequests/`, shared `Components/` |
 | `Windows/` | settings, welcome and update windows |
 | `System/` | Keychain, do-not-disturb (calls, full screen), jumping to a terminal or editor, self-update |

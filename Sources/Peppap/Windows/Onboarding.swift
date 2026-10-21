@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Окно первого запуска: язык, подключение hooks и GitLab, разрешения, как пользоваться.
+/// Окно первого запуска: язык, подключение hooks, GitLab и GitHub, разрешения, как пользоваться.
 struct OnboardingView: View {
     @ObservedObject var store: SessionStore
     let onInstallHooks: () -> Void
@@ -17,8 +17,8 @@ struct OnboardingView: View {
                 Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 64, height: 64)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L("Welcome to Peppap", "Добро пожаловать в Peppap")).font(.title2.bold())
-                    Text(L("Your dev status in the notch: Claude Code sessions and GitLab merge requests.",
-                           "Ваш рабочий статус в челке: сессии Claude Code и merge requests в GitLab."))
+                    Text(L("Your dev status in the notch: Claude Code sessions, GitLab merge requests and GitHub pull requests.",
+                           "Ваш рабочий статус в челке: сессии Claude Code, merge requests в GitLab и pull requests в GitHub."))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -41,11 +41,11 @@ struct OnboardingView: View {
                 }
             }
 
-            Step(number: 2, title: L("Connect GitLab (optional)", "Подключите GitLab (по желанию)"),
-                 text: L("See your open merge requests and review requests, with pipeline status and what blocks the merge. "
-                         + "You need the host of your GitLab and a token with the api scope (read_api if you only want to look).",
-                         "Ваши открытые merge requests и запросы на ревью, со статусом пайплайна и тем, что мешает влить. "
-                         + "Понадобятся адрес вашего GitLab и токен со scope api (read_api, если только смотреть).")) {
+            Step(number: 2, title: L("Connect GitLab or GitHub (optional)", "Подключите GitLab или GitHub (по желанию)"),
+                 text: L("See your open merge and pull requests and review requests, with CI status and what blocks the merge. "
+                         + "You need a token: with the api scope for GitLab (read_api if you only want to look), with the repo scope for GitHub.",
+                         "Ваши открытые merge и pull requests и запросы на ревью, со статусом CI и тем, что мешает влить. "
+                         + "Понадобится токен: для GitLab — со scope api (read_api, если только смотреть), для GitHub — со scope repo.")) {
                 Button(L("Set Up in Settings…", "Настроить…"), action: onOpenSettings)
             }
 
@@ -57,9 +57,9 @@ struct OnboardingView: View {
 
             Step(number: 4, title: L("Use it", "Пользуйтесь"),
                  text: L("Hover over the notch or press \(Prefs.hotkey.title). "
-                         + "The notch expands by itself when Claude finishes or needs your permission, and when something happens to your merge requests.",
+                         + "The notch expands by itself when Claude finishes or needs your permission, and when something happens to your merge or pull requests.",
                          "Наведите курсор на челку или нажмите \(Prefs.hotkey.title). "
-                         + "Челка раскроется сама, когда Claude закончит или попросит разрешения, и когда что-то случится с вашими merge requests.")) {
+                         + "Челка раскроется сама, когда Claude закончит или попросит разрешения, и когда что-то случится с вашими merge или pull requests.")) {
                 Button(L("Play demo", "Показать демо"), action: onPlayDemo)
             }
 

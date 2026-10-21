@@ -8,8 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = SettingsWindow()
     private let onboarding = OnboardingWindow()
     private let updater = Updater()
-    private let gitlabServer = GitLabServer()
-    private var gitlab: GitLabStore!
+    private let servers = Forge.allCases.map { ForgeServer($0) }
+    private var forges: Forges!
     private var monitor: ClaudeMonitor!
     private var updatePrompt: UpdatePrompt!
     private var server: EventServer?
@@ -21,10 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Prefs.register()
-        gitlab = GitLabStore(source: gitlabServer)
+        forges = Forges(gitlab: MergeRequestStore(source: servers[0]), github: MergeRequestStore(source: servers[1]))
         monitor = ClaudeMonitor(store: store)
         updatePrompt = UpdatePrompt(updater: updater)
-        notch = NotchController(store: store, gitlab: gitlab, updater: updater, actions: NotchActions(
+        notch = NotchController(store: store, forges: forges, updater: updater, actions: NotchActions(
             select: { [weak self] s in self?.select(s) },
             installHooks: { [weak self] in self?.installHooks() },
             rename: { [weak self] s in self?.rename(s) },
@@ -43,7 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HookInstaller.updateIfNeeded()
         store.hooksInstalled = HookInstaller.isInstalled
         store.onAttention = { [weak self] s in self?.attention(s) }
-        gitlab.onEvents = { [weak self] events in self?.attention(events) }
+        for f in forges.all {
+            f.onEvents = { [weak self] events in self?.attention(events) }
+        }
 
         let server = EventServer(
             onEvent: { [weak self] event in self?.store.handle(event) },
@@ -66,10 +68,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKey.set(Prefs.hotkey)
         self.hotKey = hotKey
 
-        statusMenu = StatusMenu(store: store, gitlab: gitlab, updater: updater)
+        statusMenu = StatusMenu(store: store, forges: forges, updater: updater)
         statusMenu.delegate = self
         updater.startAutomaticChecks()
-        gitlab.start()
+        forges.all.forEach { $0.start() }
         if OnboardingWindow.shouldShow(hooksInstalled: store.hooksInstalled) { showOnboarding() }
         monitor.start()
     }
@@ -95,15 +97,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// События GitLab за одно обновление: один звук и одно раскрытие — на самом важном.
-    private func attention(_ events: [GitLab.Event]) {
+    /// События GitLab или GitHub за одно обновление: один звук и одно раскрытие — на самом важном.
+    private func attention(_ events: [Forge.Event]) {
         guard !demo.isRunning, let top = events.max(by: { $0.kind < $1.kind }) else { return }
         let quiet = Quiet.isQuiet
-        if Prefs.sound && !quiet { NSSound(named: Prefs.gitlabSound)?.play() }
+        if Prefs.sound && !quiet { NSSound(named: Prefs.eventSound(top.mr.forge))?.play() }
         // Пока Claude работает или ждёт ответа, челку занимают сессии; событие останется в индикаторе.
         let busy = store.topPhase == .working || store.topPhase == .permission
         if Prefs.autoExpand && !quiet && !busy {
-            notch.peek(for: Prefs.peekSeconds, tab: top.kind.tab, mergeRequest: top.mr.id)
+            notch.peek(for: Prefs.peekSeconds, tab: top.tab, mergeRequest: top.mr.id)
         }
     }
 
@@ -180,8 +182,8 @@ extension AppDelegate: StatusMenuDelegate {
     func openSettings() {
         settings.show(SettingsView(
             store: store,
-            gitlab: gitlab,
-            gitlabServer: gitlabServer,
+            forges: forges,
+            servers: servers,
             onInstallHooks: { [weak self] in self?.installHooks() },
             onUninstallHooks: { [weak self] in self?.uninstallHooks() },
             onHotKeyChange: { [weak self] preset in self?.hotKey?.set(preset) },

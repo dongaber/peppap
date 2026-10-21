@@ -18,12 +18,14 @@ private func mergeRequest(_ extra: [String: Any]) throws -> MergeRequest {
 
 let gitlabTests: [(String, @MainActor () throws -> Void)] = [
     ("нормализация хоста", {
-        expectEqual(GitLab.normalizedHost("git.example.com")?.absoluteString, "https://git.example.com")
-        expectEqual(GitLab.normalizedHost(" https://git.example.com/ ")?.absoluteString, "https://git.example.com")
-        expectEqual(GitLab.normalizedHost("https://git.example.com/api/v4")?.absoluteString, "https://git.example.com")
-        expectEqual(GitLab.normalizedHost("http://host:8080/gitlab/")?.absoluteString, "http://host:8080/gitlab")
-        expect(GitLab.normalizedHost("") == nil)
-        expect(GitLab.normalizedHost("ftp://host") == nil)
+        expectEqual(Forge.normalizedHost("git.example.com")?.absoluteString, "https://git.example.com")
+        expectEqual(Forge.normalizedHost(" https://git.example.com/ ")?.absoluteString, "https://git.example.com")
+        expectEqual(Forge.normalizedHost("https://git.example.com/api/v4")?.absoluteString, "https://git.example.com")
+        expectEqual(Forge.normalizedHost("http://host:8080/gitlab/")?.absoluteString, "http://host:8080/gitlab")
+        expectEqual(Forge.normalizedHost("https://ghe.example.com/api/v3")?.absoluteString, "https://ghe.example.com")
+        expectEqual(Forge.normalizedHost("api.github.com")?.absoluteString, "https://github.com")
+        expect(Forge.normalizedHost("") == nil)
+        expect(Forge.normalizedHost("ftp://host") == nil)
     }),
     ("разбор ответа: свои MR и ревью без повторов", {
         let json: [String: Any] = ["data": ["currentUser": [
@@ -65,7 +67,7 @@ let gitlabTests: [(String, @MainActor () throws -> Void)] = [
     }),
 ]
 
-func snapshot(authored: [[String: Any]], review: [[String: Any]] = []) throws -> GitLab.Snapshot {
+func snapshot(authored: [[String: Any]], review: [[String: Any]] = []) throws -> Forge.Snapshot {
     let json: [String: Any] = ["data": ["currentUser": ["username": "me", "authored": ["nodes": authored], "review": ["nodes": review]]]]
     return try GitLab.parse(JSONSerialization.data(withJSONObject: json))
 }
@@ -79,19 +81,19 @@ let gitlabEventTests: [(String, @MainActor () throws -> Void)] = [
                                           mrNode("2"),
                                           mrNode("3")], // новый свой MR — без события
                                review: [mrNode("5", project: "team/other"), mrNode("6", project: "team/other")])
-        let events = GitLab.events(from: old, to: new)
+        let events = Forge.events(from: old, to: new)
         expectEqual(events.map(\.kind), [.reviewRequested, .pipelineFailed, .readyToMerge])
         expectEqual(events.map(\.mr.iid), ["6", "1", "2"])
-        expectEqual(events[0].kind.tab, .review)
-        expectEqual(events[1].kind.tab, .mine)
+        expectEqual(events[0].tab, .review(.gitlab))
+        expectEqual(events[1].tab, .mine(.gitlab))
     }),
     ("без изменений — без событий", {
         let s = try snapshot(authored: [mrNode("1", extra: ["headPipeline": ["status": "FAILED"]])], review: [mrNode("2", project: "x/y")])
-        expect(GitLab.events(from: s, to: s).isEmpty)
+        expect(Forge.events(from: s, to: s).isEmpty)
     }),
     ("индикатор: первая загрузка тихая, закрытые MR пропадают", {
-        let store = GitLabStore(source: GitLabServer(token: "")) // без обращения к связке ключей
-        var received: [GitLab.Event] = []
+        let store = MergeRequestStore(source: ForgeServer(.gitlab, token: "")) // без обращения к связке ключей
+        var received: [Forge.Event] = []
         store.onEvents = { received += $0 }
         store.apply(try snapshot(authored: [mrNode("1", extra: ["detailedMergeStatus": "NOT_APPROVED"])]))
         expect(received.isEmpty)
@@ -109,18 +111,23 @@ let gitlabEventTests: [(String, @MainActor () throws -> Void)] = [
 let navigationTests: [(String, @MainActor () throws -> Void)] = [
     ("источники и подвкладки", {
         expectEqual(NotchSource.claude.tabs, [.sessions, .today, .week])
-        expectEqual(NotchSource.gitlab.tabs, [.mine, .review])
-        expectEqual(NotchSource.visible(gitlab: false), [.claude])
+        expectEqual(NotchSource.gitlab.tabs, [.mine(.gitlab), .review(.gitlab)])
+        expectEqual(NotchSource.github.tabs, [.mine(.github), .review(.github)])
+        expectEqual(NotchSource.visible(forges: []), [.claude])
+        expectEqual(NotchSource.visible(forges: [.github]), [.claude, .github])
+        expectEqual(NotchSource.visible(forges: [.github, .gitlab]), [.claude, .gitlab, .github])
     }),
     ("источник помнит свою подвкладку", {
         let ui = NotchUIState()
         ui.tab = .week
         ui.select(.gitlab)
-        expectEqual(ui.tab, .mine)
-        ui.tab = .review
+        expectEqual(ui.tab, .mine(.gitlab))
+        ui.tab = .review(.gitlab)
+        ui.select(.github)
+        expectEqual(ui.tab, .mine(.github))
         ui.select(.claude)
         expectEqual(ui.tab, .week)
         ui.select(.gitlab)
-        expectEqual(ui.tab, .review)
+        expectEqual(ui.tab, .review(.gitlab))
     }),
 ]

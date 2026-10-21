@@ -4,11 +4,13 @@ import Foundation
 enum MergeRequestAction: CaseIterable, Equatable {
     case merge, mergeWhenPipelineSucceeds, retryPipeline, rebase, approve, unapprove, markReady, markDraft
 
-    var title: String {
+    func title(_ forge: Forge) -> String {
         switch self {
         case .merge: return L("Merge", "Влить")
-        case .mergeWhenPipelineSucceeds: return L("Merge when pipeline succeeds", "Влить после пайплайна")
-        case .retryPipeline: return L("Retry pipeline", "Перезапустить пайплайн")
+        case .mergeWhenPipelineSucceeds:
+            return forge == .gitlab ? L("Merge when pipeline succeeds", "Влить после пайплайна") : L("Merge when checks pass", "Влить после проверок")
+        case .retryPipeline:
+            return forge == .gitlab ? L("Retry pipeline", "Перезапустить пайплайн") : L("Re-run failed checks", "Перезапустить упавшие проверки")
         case .rebase: return L("Rebase", "Rebase")
         case .approve: return L("Approve", "Одобрить")
         case .unapprove: return L("Revoke approval", "Отозвать аппрув")
@@ -18,13 +20,13 @@ enum MergeRequestAction: CaseIterable, Equatable {
     }
 
     /// Короткая подпись для кнопки в строке.
-    var shortTitle: String {
+    func shortTitle(_ forge: Forge) -> String {
         switch self {
-        case .mergeWhenPipelineSucceeds: return L("Merge after pipeline", "Влить после CI")
+        case .mergeWhenPipelineSucceeds: return L("Merge after CI", "Влить после CI")
         case .retryPipeline: return L("Retry", "Перезапустить")
         case .unapprove: return L("Revoke", "Отозвать")
         case .markReady: return L("Ready", "Готов")
-        default: return title
+        default: return title(forge)
         }
     }
 
@@ -63,16 +65,16 @@ enum MergeRequestAction: CaseIterable, Equatable {
         case .merge:
             return mr.mine && mr.can.merge && mr.sha != nil && mr.status == .ready
         case .mergeWhenPipelineSucceeds:
-            return mr.mine && mr.can.merge && mr.sha != nil && !mr.autoMerge && !mr.draft && !mr.conflicts
+            return mr.mine && mr.can.autoMerge && mr.sha != nil && !mr.autoMerge && !mr.draft && !mr.conflicts
                 && mr.pipeline == .running
         case .retryPipeline:
-            return mr.pipeline == .failed && mr.pipelineID != nil && mr.can.retryPipeline
+            return mr.pipeline == .failed && !mr.pipelineIDs.isEmpty && mr.can.retryPipeline
         case .rebase:
             return mr.mergeStatus == "NEED_REBASE" && mr.can.pushToSourceBranch
         case .approve:
             return !mr.mine && mr.can.approve && !approvedByMe
         case .unapprove:
-            return !mr.mine && approvedByMe
+            return !mr.mine && approvedByMe && mr.can.unapprove
         case .markReady:
             return mr.mine && mr.draft && mr.can.update
         case .markDraft:

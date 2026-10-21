@@ -19,20 +19,32 @@ enum Prefs {
         static let hotkey = "hotkey"
         static let haptics = "haptics"
         static let quickReplies = "quickReplies"
-        static let gitlabEnabled = "gitlabEnabled"
-        static let gitlabHost = "gitlabHost"
-        static let gitlabInterval = "gitlabInterval"
-        static let gitlabNotifyReview = "gitlabNotifyReview"
-        static let gitlabNotifyFailed = "gitlabNotifyFailed"
-        static let gitlabNotifyReady = "gitlabNotifyReady"
-        static let gitlabSound = "gitlabSound"
         static let language = L10n.key
+
+        // У каждого сервиса свои настройки: gitlabEnabled, githubEnabled, …
+        static func enabled(_ f: Forge) -> String { f.rawValue + "Enabled" }
+        static func host(_ f: Forge) -> String { f.rawValue + "Host" }
+        static func interval(_ f: Forge) -> String { f.rawValue + "Interval" }
+        static func notifyReview(_ f: Forge) -> String { f.rawValue + "NotifyReview" }
+        static func notifyFailed(_ f: Forge) -> String { f.rawValue + "NotifyFailed" }
+        static func notifyReady(_ f: Forge) -> String { f.rawValue + "NotifyReady" }
+        static func eventSound(_ f: Forge) -> String { f.rawValue + "Sound" }
     }
 
     static let soundNames = ["Glass", "Hero", "Ping", "Pop", "Purr", "Submarine", "Tink", "Funk", "Blow", "Bottle", "Frog", "Morse", "Sosumi", "Basso"]
 
     static func register() {
-        UserDefaults.standard.register(defaults: [
+        var forgeDefaults: [String: Any] = [:]
+        for f in Forge.allCases {
+            forgeDefaults[Key.enabled(f)] = true
+            forgeDefaults[Key.host(f)] = f.defaultHost
+            forgeDefaults[Key.interval(f)] = 120.0
+            forgeDefaults[Key.notifyReview(f)] = true
+            forgeDefaults[Key.notifyFailed(f)] = true
+            forgeDefaults[Key.notifyReady(f)] = true
+            forgeDefaults[Key.eventSound(f)] = "Ping"
+        }
+        UserDefaults.standard.register(defaults: forgeDefaults.merging([
             Key.sound: true,
             Key.soundDone: "Glass",
             Key.soundPermission: "Funk",
@@ -48,13 +60,7 @@ enum Prefs {
             Key.collapseDelay: 0.3,
             Key.hotkey: HotKeyPreset.ctrlOptC.rawValue,
             Key.haptics: true,
-            Key.gitlabEnabled: true,
-            Key.gitlabInterval: 120.0,
-            Key.gitlabNotifyReview: true,
-            Key.gitlabNotifyFailed: true,
-            Key.gitlabNotifyReady: true,
-            Key.gitlabSound: "Ping",
-        ])
+        ]) { _, new in new })
     }
 
     private static var d: UserDefaults { .standard }
@@ -81,15 +87,15 @@ enum Prefs {
         (d.string(forKey: Key.quickReplies) ?? defaultQuickReplies).split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
-    static var gitlabEnabled: Bool { d.bool(forKey: Key.gitlabEnabled) }
-    static var gitlabHostURL: URL? { GitLab.normalizedHost(d.string(forKey: Key.gitlabHost) ?? "") }
-    static var gitlabInterval: Double { d.double(forKey: Key.gitlabInterval) }
-    static var gitlabSound: String { d.string(forKey: Key.gitlabSound) ?? "Ping" }
-    static func gitlabNotifies(_ kind: GitLab.Event.Kind) -> Bool {
+    static func enabled(_ f: Forge) -> Bool { d.bool(forKey: Key.enabled(f)) }
+    static func hostURL(_ f: Forge) -> URL? { Forge.normalizedHost(d.string(forKey: Key.host(f)) ?? "") }
+    static func interval(_ f: Forge) -> Double { d.double(forKey: Key.interval(f)) }
+    static func eventSound(_ f: Forge) -> String { d.string(forKey: Key.eventSound(f)) ?? "Ping" }
+    static func notifies(_ kind: Forge.Event.Kind, forge f: Forge) -> Bool {
         switch kind {
-        case .reviewRequested: return d.bool(forKey: Key.gitlabNotifyReview)
-        case .pipelineFailed: return d.bool(forKey: Key.gitlabNotifyFailed)
-        case .readyToMerge: return d.bool(forKey: Key.gitlabNotifyReady)
+        case .reviewRequested: return d.bool(forKey: Key.notifyReview(f))
+        case .pipelineFailed: return d.bool(forKey: Key.notifyFailed(f))
+        case .readyToMerge: return d.bool(forKey: Key.notifyReady(f))
         }
     }
     static var hotkey: HotKeyPreset { HotKeyPreset(rawValue: d.string(forKey: Key.hotkey) ?? "") ?? .ctrlOptC }

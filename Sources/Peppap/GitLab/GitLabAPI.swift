@@ -22,9 +22,7 @@ enum GitLabError: LocalizedError, Equatable {
     }
 }
 
-extension GitLab {
-    static let tokenAccount = "gitlab-token"
-
+enum GitLab {
     /// Свои MR и MR, где меня позвали на ревью. Поля — только из CE-редакции GitLab.
     static let query = """
         query {
@@ -44,21 +42,7 @@ extension GitLab {
         }
         """
 
-    /// «git.example.com», «https://git.example.com/» или ссылка на API → https://git.example.com.
-    static func normalizedHost(_ raw: String) -> URL? {
-        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !s.isEmpty else { return nil }
-        if !s.contains("://") { s = "https://" + s }
-        while s.hasSuffix("/") { s.removeLast() }
-        for suffix in ["/api/graphql", "/api/v4"] where s.hasSuffix(suffix) {
-            s.removeLast(suffix.count)
-        }
-        guard let url = URL(string: s), let scheme = url.scheme, ["http", "https"].contains(scheme),
-              url.host?.isEmpty == false else { return nil }
-        return url
-    }
-
-    static func fetch(host: URL, token: String) async throws -> Snapshot {
+    static func fetch(host: URL, token: String) async throws -> Forge.Snapshot {
         let (data, code) = try await send(graphQL(host: host, token: token, query: query))
         if code == 401 || code == 403 { throw GitLabError.unauthorized }
         guard code == 200 else { throw GitLabError.http(code) }
@@ -113,7 +97,7 @@ extension GitLab {
         case .retryPipeline:
             return graphQL(host: host, token: token,
                            query: "mutation($input: PipelineRetryInput!) { result: pipelineRetry(input: $input) { errors } }",
-                           variables: ["input": ["id": mr.pipelineID ?? ""]])
+                           variables: ["input": ["id": mr.pipelineIDs.first ?? ""]])
         case .markReady, .markDraft:
             return graphQL(host: host, token: token,
                            query: "mutation($input: MergeRequestSetDraftInput!) { result: mergeRequestSetDraft(input: $input) { errors } }",

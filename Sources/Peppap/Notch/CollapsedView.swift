@@ -2,13 +2,13 @@ import SwiftUI
 
 struct CollapsedView: View {
     @ObservedObject var store: SessionStore
-    @ObservedObject var gitlab: GitLabStore
+    @ObservedObject var forges: Forges
     @ObservedObject var ui: NotchUIState
     static let wing: CGFloat = 46
 
     var body: some View {
         HStack(spacing: 0) {
-            // Claude важнее: события GitLab видны, только пока сессии ничего не делают.
+            // Claude важнее: события GitLab и GitHub видны, только пока сессии ничего не делают.
             if store.hasActivity {
                 ZStack {
                     if let progress = store.topTodoProgress {
@@ -17,8 +17,8 @@ struct CollapsedView: View {
                     PhaseIcon(phase: store.topPhase, size: 14)
                 }
                 .frame(width: Self.wing)
-            } else if let kind = gitlab.attentionKind {
-                Image(systemName: NotchSource.gitlab.symbol)
+            } else if let top = forges.attentionStore, let kind = top.attentionKind {
+                Image(systemName: NotchSource(top.forge).symbol)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(kind.color)
                     .frame(width: Self.wing)
@@ -26,8 +26,8 @@ struct CollapsedView: View {
             Color.clear.frame(width: ui.notchWidth)
             if store.hasActivity {
                 trailing.frame(width: Self.wing)
-            } else if gitlab.hasAttention {
-                Text("\(gitlab.attention.count)")
+            } else if forges.hasAttention {
+                Text("\(forges.attentionCount)")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(Ink.primary)
                     .frame(width: Self.wing)
