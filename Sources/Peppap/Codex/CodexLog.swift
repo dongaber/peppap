@@ -39,11 +39,46 @@ enum CodexLog {
                   let last = info["last_token_usage"] as? [String: Any] else { continue }
             let tokens = Int(num(last["total_tokens"]))
             guard tokens > 0 else { continue }
-            var e = UsageEntry(date: l.date, tokens: tokens, cost: 0, contextTokens: tokens, sidechain: false, model: model)
+            // input_tokens уже включает кэшированные; output_tokens — и рассуждения.
+            // Выражение разбито на шаги: одной строкой компилятор в CI не успевает вывести типы.
+            let p = price(for: model)
+            let cached: Double = num(last["cached_input_tokens"])
+            let fresh: Double = max(0, num(last["input_tokens"]) - cached)
+            let output: Double = num(last["output_tokens"])
+            let dollars: Double = fresh * p.input + cached * p.cachedInput + output * p.output
+            let cost = dollars / 1_000_000
+            var e = UsageEntry(date: l.date, tokens: tokens, cost: cost, contextTokens: tokens, sidechain: false, model: model)
             e.contextWindow = (info["model_context_window"] as? NSNumber)?.intValue
             out["codex:\(Int(num(total["total_tokens"])))"] = e
         }
         return out
+    }
+
+    struct Price {
+        let input, cachedInput, output: Double // $ за 1M токенов
+    }
+
+    /// Цены OpenAI API, стандартный тариф. Codex-версии моделей, которых нет в прайсе, стоят как базовая модель.
+    static func price(for model: String) -> Price {
+        let m = model.lowercased()
+        // У pro-моделей скидки на кэш нет.
+        if m.contains("pro") {
+            if m.contains("5.5") || m.contains("5.4") { return Price(input: 30, cachedInput: 30, output: 180) }
+            if m.contains("5.2") { return Price(input: 21, cachedInput: 21, output: 168) }
+            return Price(input: 15, cachedInput: 15, output: 120)
+        }
+        if m.contains("cyber") { return Price(input: 12.50, cachedInput: 1.25, output: 75) }
+        if m.contains("5.6-sol") { return Price(input: 4, cachedInput: 0.40, output: 20) }
+        if m.contains("5.6-terra") { return Price(input: 2, cachedInput: 0.20, output: 12) }
+        if m.contains("5.6-luna") { return Price(input: 0.20, cachedInput: 0.02, output: 1.20) }
+        if m.contains("5.5") { return Price(input: 5, cachedInput: 0.50, output: 30) }
+        if m.contains("5.4-mini") { return Price(input: 0.75, cachedInput: 0.075, output: 4.50) }
+        if m.contains("5.4-nano") { return Price(input: 0.20, cachedInput: 0.02, output: 1.25) }
+        if m.contains("5.4") { return Price(input: 2.50, cachedInput: 0.25, output: 15) }
+        if m.contains("5.2") || m.contains("5.3") { return Price(input: 1.75, cachedInput: 0.175, output: 14) }
+        if m.contains("mini") { return Price(input: 0.25, cachedInput: 0.025, output: 2) }
+        if m.contains("nano") { return Price(input: 0.05, cachedInput: 0.005, output: 0.40) }
+        return Price(input: 1.25, cachedInput: 0.125, output: 10) // gpt-5, gpt-5.1 и их codex-версии
     }
 
     /// Последние лимиты в тексте журнала. primary — окно 5 часов, secondary — неделя (уточняем по window_minutes).

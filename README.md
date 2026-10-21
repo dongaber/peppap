@@ -40,7 +40,7 @@ The expanded notch has a source switch next to the notch (Claude · Codex · Git
 
 - The same **Sessions, Today and Week** tabs as for Claude: status in the notch, the plan (`update_plan`), subagents, Codex's last reply, tokens, changed files.
 - **Answer permission requests from the notch:** Allow, Deny or hand the request back to the terminal, with a preview of `apply_patch` edits. Codex has no "Always allow" for hooks.
-- **Exact subscription limits** (5-hour and weekly) and context usage, read from Codex session logs in `~/.codex/sessions`. Cost isn't estimated: the logs have tokens but no prices.
+- **Exact subscription limits** (5-hour and weekly) and context usage, read from Codex session logs in `~/.codex/sessions`. Cost at OpenAI API prices is optional (Settings → Codex): with a ChatGPT plan you don't pay it, so it is off by default.
 - Quick replies, jumping to the session's terminal and Esc interrupts work as for Claude.
 
 ### GitLab

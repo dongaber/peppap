@@ -48,13 +48,13 @@ enum Report {
                 }
                 var meta = [Fmt.duration(r.duration)]
                 if r.files > 0 { meta.append(Fmt.files(r.files)) }
-                if let c = r.cost { meta.append(Fmt.usd(c)) }
+                if cost, let c = r.cost { meta.append(Fmt.usd(c)) }
                 let prompt = (r.prompt ?? "—").replacingOccurrences(of: "\n", with: " ")
                 md += "- \(Fmt.time(r.start)) **\(r.project)** — \(prompt) _(\(meta.joined(separator: ", ")))_\n"
             }
         }
-        md += cost ? L("\nTasks and time are counted since Peppap was installed. Cost is estimated from Claude Code transcripts.\n",
-                       "\nЗадачи и время учитываются с момента установки Peppap. Стоимость — оценка по журналам Claude Code.\n")
+        md += cost ? L("\nTasks and time are counted since Peppap was installed. Cost is estimated from \(agent.product) logs at API prices.\n",
+                       "\nЗадачи и время учитываются с момента установки Peppap. Стоимость — оценка по журналам \(agent.product) и ценам API.\n")
                    : L("\nTasks and time are counted since Peppap was installed.\n", "\nЗадачи и время учитываются с момента установки Peppap.\n")
         return md
     }

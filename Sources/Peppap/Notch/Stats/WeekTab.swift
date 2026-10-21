@@ -66,8 +66,8 @@ struct WeekTab: View {
                     Stat(title: L("≈ at API prices", "≈ по ценам API"), value: Fmt.usd(days.reduce(0) { $0 + $1.cost }))
                 }
             }
-            Text(store.agent.hasCost ? L("Tasks and time are counted since Peppap was installed; cost comes from Claude Code transcripts.",
-                                         "Задачи и время считаются с момента установки Peppap, стоимость — по журналам Claude Code.")
+            Text(store.agent.hasCost ? L("Tasks and time are counted since Peppap was installed; cost comes from \(store.agent.product) logs.",
+                                         "Задачи и время считаются с момента установки Peppap, стоимость — по журналам \(store.agent.product).")
                                      : L("Tasks and time are counted since Peppap was installed.",
                                          "Задачи и время считаются с момента установки Peppap."))
                 .font(.system(size: 10)).foregroundStyle(Ink.muted)

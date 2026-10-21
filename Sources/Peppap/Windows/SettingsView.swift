@@ -28,6 +28,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.Key.haptics) private var haptics = true
     @AppStorage(Prefs.Key.quickReplies) private var quickReplies = Prefs.defaultQuickReplies
     @AppStorage(Prefs.Key.language) private var language = AppLanguage.system.rawValue
+    @AppStorage(Prefs.Key.codexCost) private var codexCost = false
     @AppStorage(Updater.checkKey) private var checkUpdates = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
@@ -50,6 +51,9 @@ struct SettingsView: View {
                         } else {
                             Button(L("Connect", "Подключить")) { onInstallHooks(agent) }
                         }
+                    }
+                    if agent == .codex {
+                        Toggle(L("Estimate cost at OpenAI API prices", "Оценивать стоимость по ценам OpenAI API"), isOn: $codexCost)
                     }
                 } header: {
                     Text(agent.product)
@@ -176,9 +180,11 @@ struct SettingsView: View {
                      "Статус сессий, запросы разрешений и расход приходят из hooks Claude Code и его строки состояния.")
         case .codex:
             return L("Session status and permission requests come from Codex hooks in ~/.codex/hooks.json, limits and tokens from its session logs. "
-                     + "After connecting, run /hooks in Codex once and trust the Peppap hooks.",
+                     + "After connecting, run /hooks in Codex once and trust the Peppap hooks. "
+                     + "The cost estimate is what the same tokens would cost through the OpenAI API; with a ChatGPT plan you don't pay it.",
                      "Статус сессий и запросы разрешений приходят из hooks Codex в ~/.codex/hooks.json, лимиты и токены — из его журналов. "
-                     + "После подключения один раз выполните /hooks в Codex и доверьте hooks Peppap.")
+                     + "После подключения один раз выполните /hooks в Codex и доверьте hooks Peppap. "
+                     + "Оценка стоимости — сколько те же токены стоили бы через OpenAI API; по подписке ChatGPT вы её не платите.")
         }
     }
 

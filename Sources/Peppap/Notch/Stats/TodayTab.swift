@@ -15,7 +15,7 @@ struct TodayTab: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(records.prefix(9)) { r in
-                        RecordRow(record: r)
+                        RecordRow(record: r, hasCost: store.agent.hasCost)
                     }
                 }
             }
@@ -25,6 +25,7 @@ struct TodayTab: View {
 
 private struct RecordRow: View {
     let record: TaskRecord
+    let hasCost: Bool
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -45,7 +46,7 @@ private struct RecordRow: View {
     private var meta: String {
         var parts = [Fmt.duration(record.duration)]
         if record.files > 0 { parts.append(Fmt.files(record.files)) }
-        if let cost = record.cost { parts.append(Fmt.usd(cost)) }
+        if hasCost, let cost = record.cost { parts.append(Fmt.usd(cost)) }
         return parts.joined(separator: " · ")
     }
 }

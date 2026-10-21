@@ -445,7 +445,7 @@ final class SessionStore: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self, let i = self.history.firstIndex(where: { $0.id == recordID }) else { return }
                 self.history[i].tokens = m.taskTokens
-                self.history[i].cost = self.agent.hasCost ? m.taskCost : nil
+                self.history[i].cost = m.taskCost // показывать ли — решает Agent.hasCost
                 History.save(self.history, self.agent)
             }
         }
