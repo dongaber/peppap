@@ -1,6 +1,7 @@
 import AppKit
 
-/// Отладочные команды локального сервера (GET /demo-…): демо, снимки окон, проверка обновлений.
+#if DEV
+/// Отладочные команды локального сервера (GET /demo-…): демо, снимки окон, проверка обновлений. Только в сборке DEV.
 @MainActor
 final class DebugCommands {
     private let updater: Updater
@@ -56,3 +57,4 @@ final class DebugCommands {
         return "started\n"
     }
 }
+#endif

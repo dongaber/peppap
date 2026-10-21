@@ -3,6 +3,7 @@
 #
 #   ./build.sh                       — сборка под текущий процессор
 #   ARCHS="arm64 x86_64" ./build.sh  — универсальная сборка (так собирает CI)
+#   DEV=1 ./build.sh                 — сборка для разработки: запись демо-ролика и отладочные команды сервера
 #
 # Версия берётся из package.json, номер сборки — из числа коммитов (или BUILD_NUMBER).
 set -eu
@@ -13,19 +14,22 @@ VERSION=$(app_version)
 BUILD_NUMBER=${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}
 ARCHS=${ARCHS:-$(uname -m)}
 APP=build/Peppap.app
+# Инструменты разработки (флаг компиляции DEV) в релиз не попадают: по умолчанию их нет.
+FLAGS=""
+if [ "${DEV:-0}" = 1 ]; then FLAGS="-D DEV"; fi
 
 rm -rf "$APP" build/obj
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" build/obj
 
 SDK=${SDK:-$(pick_sdk)}
-echo "Peppap $VERSION ($BUILD_NUMBER), архитектуры: $ARCHS"
+echo "Peppap $VERSION ($BUILD_NUMBER), архитектуры: $ARCHS${FLAGS:+, сборка для разработки}"
 echo "SDK: $SDK"
 
 SOURCES=$(find Sources/Peppap -name '*.swift' | sort)
 BINARIES=""
 for arch in $ARCHS; do
   # shellcheck disable=SC2086
-  swiftc -O -sdk "$SDK" -swift-version 5 -parse-as-library \
+  swiftc -O -sdk "$SDK" -swift-version 5 -parse-as-library $FLAGS \
     -target "$arch-apple-macos14.0" \
     -o "build/obj/Peppap-$arch" \
     $SOURCES

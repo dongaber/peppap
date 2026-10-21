@@ -17,7 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKey: HotKey?
     private var statusMenu: StatusMenu!
     private var demo: DemoRecorder!
+    #if DEV
     private var debug: DebugCommands!
+    #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Prefs.register()
@@ -37,9 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
         updatePrompt.willPresent = { [weak self] in self?.notch.collapse() }
         demo = DemoRecorder(notch: notch)
+        #if DEV
         debug = DebugCommands(updater: updater, updatePrompt: updatePrompt, demo: demo, onboarding: onboarding,
                               showOnboarding: { [weak self] in self?.showOnboarding() },
                               startDemo: { [weak self] record, language in self?.startDemo(record: record, language: language) })
+        #endif
         for store in agents.all {
             store.agent.updateHooksIfNeeded()
             store.hooksInstalled = store.agent.hooksInstalled
@@ -58,8 +62,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for store in agents.all {
             store.onPermissionReply = { [weak server] id, body in server?.reply(id, json: body) }
         }
+        // Отладочные команды сервера (/debug, /demo-…) — только в сборке для разработки.
+        #if DEV
         server.debugState = { [weak self] in self?.agents.all.map(\.debugDescription).joined() ?? "" }
         server.debugCommand = { [weak self] path in self?.debug.handle(path) ?? "" }
+        #endif
         do {
             try server.start()
             self.server = server
@@ -238,6 +245,7 @@ extension AppDelegate: StatusMenuDelegate {
     /// Проигрывает демо-сценарий без записи.
     func playDemo() { startDemo(record: false) }
 
+    #if DEV
     func recordDemo() {
         if !CGPreflightScreenCaptureAccess() {
             CGRequestScreenCaptureAccess()
@@ -248,6 +256,7 @@ extension AppDelegate: StatusMenuDelegate {
         }
         startDemo(record: true)
     }
+    #endif
 
     func refreshStats() { monitors.forEach { $0.refreshUsage() } }
 }

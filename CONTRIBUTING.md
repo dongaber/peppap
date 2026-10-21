@@ -30,6 +30,7 @@ Only the Command Line Tools are needed:
 
 ```sh
 ./build.sh          # build/Peppap.app
+DEV=1 ./build.sh    # with development tools: demo recording, debug commands of the local server
 scripts/test.sh     # tests (also run in CI and before every release)
 ```
 

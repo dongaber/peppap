@@ -11,7 +11,9 @@ protocol StatusMenuDelegate: AnyObject {
     func showOnboarding()
     func exportReport(_ agent: Agent)
     func playDemo()
+    #if DEV
     func recordDemo()
+    #endif
     func refreshStats()
 }
 
@@ -77,7 +79,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             add(menu, title, #selector(menuExportReport), tag: agent)
         }
         add(menu, L("Play demo", "Показать демо"), #selector(menuPlayDemo))
+        #if DEV
         add(menu, L("Record demo video…", "Записать демо-ролик…"), #selector(menuRecordDemo))
+        #endif
         add(menu, L("Refresh stats", "Обновить статистику"), #selector(menuRefresh))
         menu.addItem(.separator())
         add(menu, L("Quit", "Выйти"), #selector(quit), key: "q")
@@ -102,7 +106,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     private func agent(_ item: NSMenuItem) -> Agent { (item.representedObject as? String).flatMap(Agent.init) ?? .claude }
     @objc private func menuPlayDemo() { delegate?.playDemo() }
+    #if DEV
     @objc private func menuRecordDemo() { delegate?.recordDemo() }
+    #endif
     @objc private func menuRefresh() { delegate?.refreshStats() }
     @objc private func quit() { NSApp.terminate(nil) }
 }
