@@ -3,6 +3,13 @@
 All notable changes to Peppap. Versions follow [SemVer](https://semver.org/); entries are generated from
 [Conventional Commits](https://www.conventionalcommits.org) by `bun run release`.
 
+## [1.0.0](https://github.com/dongaber/peppap/compare/v0.6.1...v1.0.0) (2026-10-21)
+
+### Added
+
+* add Codex sessions ([#12](https://github.com/dongaber/peppap/issues/12)) ([cdb67a7](https://github.com/dongaber/peppap/commit/cdb67a7b1321a3d520c4891f79751e6514771cd1))
+* add GitHub pull requests ([#11](https://github.com/dongaber/peppap/issues/11)) ([f3ebc74](https://github.com/dongaber/peppap/commit/f3ebc74d3b124ad45e18bb47f037c480bfa57f78))
+
 ## [0.6.1](https://github.com/dongaber/peppap/compare/v0.6.0...v0.6.1) (2026-10-18)
 
 ### Changed
