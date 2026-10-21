@@ -45,7 +45,7 @@ struct SessionRow: View {
 
             if let p = session.pending {
                 if p.questions.isEmpty {
-                    PermissionCard(prompt: p) { store.answer($0, sessionID: session.id) }
+                    PermissionCard(prompt: p, agent: session.agent) { store.answer($0, sessionID: session.id) }
                 } else {
                     QuestionCard(questions: p.questions,
                                  onSubmit: { store.answerQuestions($0, sessionID: session.id) },
@@ -72,7 +72,7 @@ struct SessionRow: View {
             MetaLine(session: session)
 
             if (session.phase == .done || session.phase == .waiting) && TerminalFocus.canSend(to: session) {
-                QuickReply { actions.send(session, $0) }
+                QuickReply(agent: session.agent) { actions.send(session, $0) }
             }
         }
         .padding(.horizontal, 10)
@@ -99,8 +99,9 @@ struct SessionRow: View {
     }
 }
 
-/// Быстрый ответ Claude: готовые фразы и своё сообщение.
+/// Быстрый ответ агенту: готовые фразы и своё сообщение.
 private struct QuickReply: View {
+    let agent: Agent
     let send: (String) -> Void
     @State private var text = ""
 
@@ -111,7 +112,7 @@ private struct QuickReply: View {
                     .buttonStyle(NotchButtonStyle())
                     .controlSize(.small)
             }
-            TextField(L("Message Claude…", "Написать Claude…"), text: $text)
+            TextField(L("Message \(agent.title)…", "Написать \(agent.title)…"), text: $text)
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
                 .onSubmit {
@@ -140,8 +141,10 @@ private struct MetaLine: View {
     private var items: [String] {
         var out: [String] = []
         if let m = session.metrics {
-            if m.taskTokens > 0 { out.append(L("task", "задача") + " \(Fmt.tokens(m.taskTokens)) · \(Fmt.usd(m.taskCost))") }
-            if m.tokens > 0 { out.append(L("session", "сессия") + " \(Fmt.tokens(m.tokens)) · \(Fmt.usd(m.cost))") }
+            // У Codex цен нет — только токены.
+            let cost = { (usd: Double) in session.agent.hasCost ? " · " + Fmt.usd(usd) : "" }
+            if m.taskTokens > 0 { out.append(L("task", "задача") + " \(Fmt.tokens(m.taskTokens))" + cost(m.taskCost)) }
+            if m.tokens > 0 { out.append(L("session", "сессия") + " \(Fmt.tokens(m.tokens))" + cost(m.cost)) }
         }
         if !session.changedFiles.isEmpty { out.append(L("changed ", "изменено ") + Fmt.files(session.changedFiles.count)) }
         if let st = session.status, let add = st.linesAdded, let del = st.linesRemoved, add + del > 0 {
@@ -188,7 +191,7 @@ struct DiffRow: View {
     }
 }
 
-/// План Claude: сегменты прогресса и текущий пункт.
+/// План агента: сегменты прогресса и текущий пункт.
 private struct TodoStrip: View {
     let todos: [TodoItem]
 

@@ -20,16 +20,19 @@ final class SessionStore: ObservableObject {
     /// Ответ hook-скрипту, ждущему решения (nil — спросить в терминале).
     var onPermissionReply: ((String, Data?) -> Void)?
 
+    let agent: Agent
     /// Пишет ли историю и статистику дня на диск (хранилище демо и тестов — только в памяти).
     private let persistent: Bool
-    private let transcripts = TranscriptReader()
+    private let transcripts: TranscriptReader
     private var metricsRequested: [String: Date] = [:]
     private var permissionTimers: [String: Timer] = [:]
 
-    init(persistent: Bool = true) {
+    init(agent: Agent = .claude, persistent: Bool = true) {
+        self.agent = agent
         self.persistent = persistent
-        today = persistent ? DayStats.load() : DayStats(day: DayStats.key())
-        history = persistent ? History.load() : []
+        transcripts = TranscriptReader(agent: agent)
+        today = persistent ? DayStats.load(agent) : DayStats(day: DayStats.key())
+        history = persistent ? History.load(agent) : []
     }
 
     /// Хранилище в памяти с готовой историей, расходом и лимитами (демо).
@@ -72,8 +75,8 @@ final class SessionStore: ObservableObject {
             return
         }
 
-        var s = sessions.first { $0.id == e.sessionID } ?? ClaudeSession(id: e.sessionID, cwd: e.cwd)
-        // В одном терминале работает один Claude: новая сессия там (/clear, перезапуск) заменяет старую.
+        var s = sessions.first { $0.id == e.sessionID } ?? ClaudeSession(id: e.sessionID, cwd: e.cwd, agent: agent)
+        // В одном терминале работает один агент: новая сессия там (/clear, перезапуск) заменяет старую.
         if let tty = e.tty, tty != "??" {
             for var other in sessions where other.id != e.sessionID && other.tty == tty {
                 releasePermission(&other)
@@ -137,7 +140,7 @@ final class SessionStore: ObservableObject {
             // Карточку не трогаем: параллельный инструмент мог завершиться, пока ждём разрешения.
             if s.pending == nil && (s.phase == .permission || s.phase == .idle) { s.phase = .working }
             if e.toolName == "AskUserQuestion" { s.question = nil }
-            if let file = e.filePath { s.changedFiles.insert(file) }
+            s.changedFiles.formUnion(e.filePaths)
             if let task = e.createdTask {
                 var t = task
                 if t.id.isEmpty { t.id = "\(s.todos.count + 1)" }
@@ -158,6 +161,13 @@ final class SessionStore: ObservableObject {
             s.subagents = max(0, s.subagents - 1)
         case "PreCompact":
             s.activity = L("Compacting context…", "Сжимает контекст…")
+        case "Interrupt": // Codex: Esc или Ctrl+C прервали ход
+            releasePermission(&s)
+            s.question = nil
+            s.subagents = 0
+            s.taskStart = nil
+            s.activity = L("Interrupted", "Прервано")
+            s.phase = .waiting
         case "Notification":
             let msg = (e.message ?? "").lowercased()
             if e.notificationType == "permission_prompt" || msg.contains("permission") {
@@ -260,7 +270,13 @@ final class SessionStore: ObservableObject {
         permissionTimers[id] = timer
     }
 
-    // MARK: - Строка состояния
+    // MARK: - Строка состояния и лимиты
+
+    /// Лимиты из журналов Codex: у него нет строки состояния.
+    func applyLimits(_ l: CodexLog.Limits) {
+        guard l.at > limits?.at ?? .distantPast else { return }
+        limits = (l.fiveHour, l.sevenDay, l.at)
+    }
 
     func applyStatus(_ info: StatusInfo) {
         if info.fiveHour != nil || info.sevenDay != nil {
@@ -270,10 +286,13 @@ final class SessionStore: ObservableObject {
         sessions[i].status = info
     }
 
-    /// Свежие точные лимиты (не старше 15 минут).
+    /// Свежие точные лимиты: у Claude — не старше 15 минут; у Codex журнал обновляет их только при работе,
+    /// поэтому верим им до 5 часов, пока не прошёл сброс окна.
     var freshLimits: (fiveHour: StatusInfo.Limit?, sevenDay: StatusInfo.Limit?)? {
-        guard let l = limits, Date().timeIntervalSince(l.at) < 15 * 60 else { return nil }
-        return (l.fiveHour, l.sevenDay)
+        let maxAge: TimeInterval = agent == .claude ? 15 * 60 : 5 * 3600
+        guard let l = limits, Date().timeIntervalSince(l.at) < maxAge else { return nil }
+        func live(_ limit: StatusInfo.Limit?) -> StatusInfo.Limit? { limit.flatMap { ($0.resetsAt ?? .distantFuture) > Date() ? $0 : nil } }
+        return (live(l.fiveHour), live(l.sevenDay))
     }
 
     // MARK: - Процессы и журналы
@@ -293,9 +312,9 @@ final class SessionStore: ObservableObject {
 
     /// Восстанавливает сессию по живому процессу и её журналу (после перезапуска Peppap).
     func restore(process p: LiveClaude, transcript: URL, snapshot snap: TranscriptSnapshot) {
-        let id = transcript.deletingPathExtension().lastPathComponent
+        let id = agent == .claude ? transcript.deletingPathExtension().lastPathComponent : CodexLog.sessionID(of: transcript)
         guard !sessions.contains(where: { $0.id == id || $0.tty == p.tty }), let cwd = p.cwd else { return }
-        var s = ClaudeSession(id: id, cwd: cwd)
+        var s = ClaudeSession(id: id, cwd: cwd, agent: agent)
         s.tty = p.tty
         s.hostBundleID = p.hostBundleID
         s.termProgram = p.termProgram
@@ -405,19 +424,19 @@ final class SessionStore: ObservableObject {
             sessions[i].subagents = 0
         }
         sessions.removeAll { $0.phase != .working && $0.pending == nil && now.timeIntervalSince($0.updatedAt) > 3 * 3600 }
-        if today.day != DayStats.key() { today = persistent ? DayStats.load() : DayStats(day: DayStats.key()) }
+        if today.day != DayStats.key() { today = persistent ? DayStats.load(agent) : DayStats(day: DayStats.key()) }
         sort()
     }
 
     private func recordTask(_ s: ClaudeSession, start: Date, duration: TimeInterval) {
-        if today.day != DayStats.key() { today = DayStats.load() }
+        if today.day != DayStats.key() { today = DayStats.load(agent) }
         today.tasks += 1
         today.seconds += duration
-        today.save()
+        today.save(agent)
 
         history.append(TaskRecord(sessionID: s.id, project: s.project, prompt: s.prompt, start: start,
                                   duration: duration, files: s.changedFiles.count))
-        History.save(history)
+        History.save(history, agent)
 
         // Стоимость задачи дописываем, когда журнал будет прочитан.
         guard let path = s.transcriptPath else { return }
@@ -426,8 +445,8 @@ final class SessionStore: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self, let i = self.history.firstIndex(where: { $0.id == recordID }) else { return }
                 self.history[i].tokens = m.taskTokens
-                self.history[i].cost = m.taskCost
-                History.save(self.history)
+                self.history[i].cost = self.agent.hasCost ? m.taskCost : nil
+                History.save(self.history, self.agent)
             }
         }
     }

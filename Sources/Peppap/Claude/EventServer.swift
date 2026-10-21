@@ -1,7 +1,7 @@
 import Foundation
 import Network
 
-/// Минимальный HTTP-сервер на 127.0.0.1: принимает POST /event от hook-скрипта.
+/// Минимальный HTTP-сервер на 127.0.0.1: принимает POST /event (Claude Code) и /event/codex от hook-скриптов.
 /// Для PermissionRequest соединение остаётся открытым, пока не придёт решение (`reply`).
 final class EventServer: @unchecked Sendable {
     static let port: UInt16 = 47821
@@ -35,7 +35,7 @@ final class EventServer: @unchecked Sendable {
         self.listener = listener
     }
 
-    /// Отвечает hook-скрипту, который ждёт решения. `nil` — без решения (Claude Code спросит в терминале).
+    /// Отвечает hook-скрипту, который ждёт решения. `nil` — без решения (агент спросит в терминале).
     func reply(_ id: String, json: Data?) {
         queue.async {
             guard let conn = self.waiting.removeValue(forKey: id) else { return }
@@ -75,7 +75,8 @@ final class EventServer: @unchecked Sendable {
                     }
                     return
                 }
-                guard var event = HookEvent(body: body, headers: headers) else {
+                let agent: Agent = path.hasPrefix("/event/codex") ? .codex : .claude
+                guard var event = HookEvent(body: body, headers: headers, agent: agent) else {
                     Self.send(conn, body: nil)
                     return
                 }
@@ -100,7 +101,7 @@ final class EventServer: @unchecked Sendable {
         }
     }
 
-    /// Claude Code прервал hook (пользователь ответил иначе, Ctrl+C) — убираем карточку.
+    /// Агент прервал hook (пользователь ответил иначе, Ctrl+C) — убираем карточку.
     private func watchClose(_ conn: NWConnection, id: String) {
         conn.receive(minimumIncompleteLength: 1, maximumLength: 1024) { [weak self] _, _, isComplete, error in
             guard let self else { return }

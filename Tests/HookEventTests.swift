@@ -23,7 +23,7 @@ let hookEventTests: [(String, @MainActor () throws -> Void)] = [
         expect(e.diff.contains { $0.kind == .add && $0.text == "c" }, "нет добавленной строки")
         expect(e.suggestionsJSON?.contains("addRules") == true)
         expect(e.inputJSON?.contains("old_string") == true)
-        expectEqual(e.filePath, "/p/a.swift")
+        expectEqual(e.filePaths, ["/p/a.swift"])
     }),
     ("TodoWrite превращается в план", {
         let e = hookEvent(["hook_event_name": "PreToolUse", "session_id": "s1", "cwd": "/p", "tool_name": "TodoWrite",

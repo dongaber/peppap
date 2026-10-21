@@ -1,6 +1,6 @@
 # Peppap
 
-Your dev status in the MacBook notch: Claude Code sessions, GitLab merge requests, GitHub pull requests and more.
+Your dev status in the MacBook notch: Claude Code and Codex sessions, GitLab merge requests, GitHub pull requests and more.
 
 ![Peppap: Claude Code sessions and GitLab merge requests in the notch](docs/demo.gif)
 
@@ -19,7 +19,7 @@ Your dev status in the MacBook notch: Claude Code sessions, GitLab merge request
 
 ## Features
 
-The expanded notch has a source switch next to the notch (Claude · GitLab · GitHub) and the source's tabs below it. GitLab and GitHub show up once you enter a token for them.
+The expanded notch has a source switch next to the notch (Claude · Codex · GitLab · GitHub) and the source's tabs below it. Each source shows up once it is connected: Claude and Codex after you connect their hooks, GitLab and GitHub after you enter a token.
 
 ### Claude Code
 
@@ -35,6 +35,13 @@ The expanded notch has a source switch next to the notch (Claude · GitLab · Gi
 - **Jump to a session:** the right Terminal or iTerm2 tab (matched by tty), the project window in VS Code, Cursor, Windsurf or Zed, or just the terminal app.
 - **Resilience:** closed terminals disappear from the list, Esc interrupts are detected from the transcript, and live sessions are restored after Peppap restarts.
 - **Right-click a session** to pin it, rename it, or hide it until its next activity.
+
+### Codex
+
+- The same **Sessions, Today and Week** tabs as for Claude: status in the notch, the plan (`update_plan`), subagents, Codex's last reply, tokens, changed files.
+- **Answer permission requests from the notch:** Allow, Deny or hand the request back to the terminal, with a preview of `apply_patch` edits. Codex has no "Always allow" for hooks.
+- **Exact subscription limits** (5-hour and weekly) and context usage, read from Codex session logs in `~/.codex/sessions`. Cost isn't estimated: the logs have tokens but no prices.
+- Quick replies, jumping to the session's terminal and Esc interrupts work as for Claude.
 
 ### GitLab
 
@@ -73,13 +80,22 @@ Requires macOS 14 or later, Apple Silicon or Intel.
 
 ## Setup
 
+### Claude Code
+
 1. Hover over the notch and click **Connect**, or use the ✦ menu in the menu bar.
    Peppap adds its hooks and status line to `~/.claude/settings.json`. A backup is saved as `settings.json.peppap-backup`, and the scripts live in `~/.peppap/`.
 2. Restart running `claude` sessions if they don't pick up the change.
 
 The hook sends event JSON to `127.0.0.1:47821`. If Peppap isn't running, `curl` exits silently and Claude Code is unaffected.
 
-The ✦ menu also has: sound toggle, settings, weekly report export, demo, demo recording, and disconnecting the hooks (which restores your previous status line).
+### Codex
+
+1. Connect the Codex hooks in the ✦ menu, Settings → Codex or the welcome window. Peppap adds them to `~/.codex/hooks.json` (backup: `hooks.json.peppap-backup`).
+2. Codex runs new hooks only after you review them: run `/hooks` in Codex once and trust the Peppap hooks. Restart running `codex` sessions.
+
+Events go to `127.0.0.1:47821/event/codex`; as with Claude, Codex is unaffected if Peppap isn't running.
+
+The ✦ menu also has: sound toggle, settings, weekly report export (per agent), demo, demo recording, and disconnecting the hooks (for Claude, this restores your previous status line).
 
 ### GitLab
 
@@ -126,7 +142,9 @@ Sources live in `Sources/Peppap/`, grouped by area:
 | Folder | Purpose |
 |---|---|
 | `App/` | entry point, app delegate, menu bar menu (`StatusMenu`), debug commands of the local server, defaults (`Prefs`), English and Russian strings (`L10n`), global hotkey |
-| `Claude/` | Claude Code sessions: hook and status line scripts (`HookInstaller`), local HTTP server for hook events (`EventServer`), hook event parsing, session state and permissions (`SessionStore`), running `claude` processes and transcripts, tokens and cost (`ClaudeMonitor`, `UsageScanner`), change preview, task history and weekly report |
+| `Agent/` | `Agent` (Claude Code or Codex) and `Agents` with the session stores of both |
+| `Claude/` | agent sessions, shared by Claude and Codex: hook and status line scripts (`HookInstaller`), local HTTP server for hook events (`EventServer`), hook event parsing, session state and permissions (`SessionStore`, one per agent), running processes and transcripts, tokens and cost (`AgentMonitor`, `UsageScanner`), change preview, task history and weekly report |
+| `Codex/` | Codex specifics: `~/.codex/hooks.json` (`CodexHookInstaller`) and session logs: tokens, limits, the last turn (`CodexLog`) |
 | `Forge/` | what GitLab and GitHub share: the merge request model and actions, change events, `MergeRequestStore` on top of a `MergeRequestSource` (`ForgeServer` from the settings or demo data), `Forges` with both stores |
 | `GitLab/`, `GitHub/` | API clients and GraphQL parsers; GitHub states are mapped to the GitLab merge statuses the model uses |
 | `Notch/` | the notch panel (`NotchController`: hover, auto-expand, keyboard) and its SwiftUI interface: `Sessions/`, `Stats/` (today and week), `MergeRequests/`, shared `Components/` |

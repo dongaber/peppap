@@ -1,20 +1,20 @@
 import SwiftUI
 
 struct CollapsedView: View {
-    @ObservedObject var store: SessionStore
+    @ObservedObject var agents: Agents
     @ObservedObject var forges: Forges
     @ObservedObject var ui: NotchUIState
     static let wing: CGFloat = 46
 
     var body: some View {
         HStack(spacing: 0) {
-            // Claude важнее: события GitLab и GitHub видны, только пока сессии ничего не делают.
-            if store.hasActivity {
+            // Агенты важнее: события GitLab и GitHub видны, только пока сессии ничего не делают.
+            if agents.hasActivity {
                 ZStack {
-                    if let progress = store.topTodoProgress {
+                    if let progress = agents.topTodoProgress {
                         ProgressRing(progress: progress).frame(width: 22, height: 22)
                     }
-                    PhaseIcon(phase: store.topPhase, size: 14)
+                    PhaseIcon(phase: agents.topPhase, size: 14)
                 }
                 .frame(width: Self.wing)
             } else if let top = forges.attentionStore, let kind = top.attentionKind {
@@ -24,7 +24,7 @@ struct CollapsedView: View {
                     .frame(width: Self.wing)
             }
             Color.clear.frame(width: ui.notchWidth)
-            if store.hasActivity {
+            if agents.hasActivity {
                 trailing.frame(width: Self.wing)
             } else if forges.hasAttention {
                 Text("\(forges.attentionCount)")
@@ -37,8 +37,8 @@ struct CollapsedView: View {
     }
 
     @ViewBuilder private var trailing: some View {
-        let busy = store.visibleSessions.filter { $0.phase == .working }.count
-        if store.topPhase == .working, let start = store.oldestRunningStart {
+        let busy = agents.visibleSessions.filter { $0.phase == .working }.count
+        if agents.topPhase == .working, let start = agents.oldestRunningStart {
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 Text(Fmt.duration(ctx.date.timeIntervalSince(start)))
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
@@ -48,7 +48,7 @@ struct CollapsedView: View {
                 if busy > 1 { Badge(count: busy).offset(x: 6, y: -6) }
             }
         } else {
-            let n = store.visibleSessions.filter { $0.phase == store.topPhase }.count
+            let n = agents.visibleSessions.filter { $0.phase == agents.topPhase }.count
             Text(n > 1 ? "\(n)" : "")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(Ink.primary)

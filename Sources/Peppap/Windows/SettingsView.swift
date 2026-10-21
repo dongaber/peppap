@@ -3,11 +3,11 @@ import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
-    @ObservedObject var store: SessionStore
+    @ObservedObject var agents: Agents
     let forges: Forges
     let servers: [ForgeServer]
-    let onInstallHooks: () -> Void
-    let onUninstallHooks: () -> Void
+    let onInstallHooks: (Agent) -> Void
+    let onUninstallHooks: (Agent) -> Void
     let onHotKeyChange: (HotKeyPreset) -> Void
     let onCheckUpdates: () -> Void
 
@@ -39,23 +39,23 @@ struct SettingsView: View {
                 }
             }
 
-            Section {
-                LabeledContent("Hooks") {
-                    if store.hooksInstalled {
-                        HStack {
-                            Label(L("connected", "подключены"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                            Button(L("Disconnect", "Отключить"), action: onUninstallHooks)
+            ForEach(Agent.allCases, id: \.self) { agent in
+                Section {
+                    LabeledContent("Hooks") {
+                        if agents[agent].hooksInstalled {
+                            HStack {
+                                Label(L("connected", "подключены"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                                Button(L("Disconnect", "Отключить")) { onUninstallHooks(agent) }
+                            }
+                        } else {
+                            Button(L("Connect", "Подключить")) { onInstallHooks(agent) }
                         }
-                    } else {
-                        Button(L("Connect", "Подключить"), action: onInstallHooks)
                     }
+                } header: {
+                    Text(agent.product)
+                } footer: {
+                    Text(hooksFooter(agent)).foregroundStyle(.secondary)
                 }
-            } header: {
-                Text("Claude Code")
-            } footer: {
-                Text(L("Session status, permission requests and usage come from Claude Code hooks and its status line.",
-                       "Статус сессий, запросы разрешений и расход приходят из hooks Claude Code и его строки состояния."))
-                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -72,8 +72,8 @@ struct SettingsView: View {
             } header: {
                 Text(L("Permissions", "Разрешения"))
             } footer: {
-                Text(L("While Peppap waits for your answer, Claude Code does not show the prompt in the terminal. If you don't answer, the request goes back to the terminal.",
-                       "Пока Peppap ждёт ответа, Claude Code не показывает запрос в терминале. Если не ответить, запрос вернётся в терминал."))
+                Text(L("While Peppap waits for your answer, Claude Code and Codex don't show the prompt in the terminal. If you don't answer, the request goes back to the terminal.",
+                       "Пока Peppap ждёт ответа, Claude Code и Codex не показывают запрос в терминале. Если не ответить, запрос вернётся в терминал."))
                     .foregroundStyle(.secondary)
             }
 
@@ -95,9 +95,9 @@ struct SettingsView: View {
 
             Section(L("Notifications", "Уведомления")) {
                 Toggle(L("Sound", "Звук"), isOn: $sound)
-                Picker(L("Claude: task done", "Claude: задача готова"), selection: $soundDone) { soundOptions }
+                Picker(L("Agent: task done", "Агент: задача готова"), selection: $soundDone) { soundOptions }
                     .disabled(!sound)
-                Picker(L("Claude: needs permission", "Claude: нужно разрешение"), selection: $soundPermission) { soundOptions }
+                Picker(L("Agent: needs permission", "Агент: нужно разрешение"), selection: $soundPermission) { soundOptions }
                     .disabled(!sound)
                 Picker(L("Play the done sound if the task took", "Звук о готовности, если задача длилась"), selection: $soundMinSeconds) {
                     Text(L("any time", "любое время")).tag(0.0)
@@ -167,6 +167,19 @@ struct SettingsView: View {
         }
         .formStyle(.grouped) // прокручивается сам, если не помещается
         .frame(minWidth: 480, idealWidth: 540, minHeight: 320, idealHeight: 640)
+    }
+
+    private func hooksFooter(_ agent: Agent) -> String {
+        switch agent {
+        case .claude:
+            return L("Session status, permission requests and usage come from Claude Code hooks and its status line.",
+                     "Статус сессий, запросы разрешений и расход приходят из hooks Claude Code и его строки состояния.")
+        case .codex:
+            return L("Session status and permission requests come from Codex hooks in ~/.codex/hooks.json, limits and tokens from its session logs. "
+                     + "After connecting, run /hooks in Codex once and trust the Peppap hooks.",
+                     "Статус сессий и запросы разрешений приходят из hooks Codex в ~/.codex/hooks.json, лимиты и токены — из его журналов. "
+                     + "После подключения один раз выполните /hooks в Codex и доверьте hooks Peppap.")
+        }
     }
 
     @ViewBuilder private var soundOptions: some View {

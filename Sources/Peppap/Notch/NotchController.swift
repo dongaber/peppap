@@ -18,7 +18,7 @@ final class NotchController {
     static let panelSize = CGSize(width: 760, height: 680)
 
     let ui = NotchUIState()
-    private(set) var store: SessionStore
+    private(set) var agents: Agents
     private(set) var forges: Forges
     private let updater: Updater
     private let panel: NotchPanel
@@ -35,8 +35,8 @@ final class NotchController {
     /// Сценарий демо управляет челкой сам — наведение мыши игнорируется.
     var scripted = false
 
-    init(store: SessionStore, forges: Forges, updater: Updater, actions: NotchActions) {
-        self.store = store
+    init(agents: Agents, forges: Forges, updater: Updater, actions: NotchActions) {
+        self.agents = agents
         self.forges = forges
         self.updater = updater
         self.actions = actions
@@ -100,14 +100,14 @@ final class NotchController {
     }
 
     /// Показывать другие данные (демо подставляет выдуманные сессии и merge requests).
-    func display(store: SessionStore, forges: Forges) {
-        self.store = store
+    func display(agents: Agents, forges: Forges) {
+        self.agents = agents
         self.forges = forges
         host.rootView = rootView()
     }
 
     private func rootView() -> AnyView {
-        AnyView(NotchView(store: store, forges: forges, ui: ui, updater: updater, actions: actions)
+        AnyView(NotchView(agents: agents, forges: forges, ui: ui, updater: updater, actions: actions)
             .frame(width: Self.panelSize.width, height: Self.panelSize.height, alignment: .top))
     }
 
@@ -142,7 +142,7 @@ final class NotchController {
                 .insetBy(dx: -8, dy: -8)
         }
         let pad = CGFloat(Prefs.hoverPadding)
-        let width = ui.notchWidth + (store.hasActivity || forges.hasAttention ? 2 * (CollapsedView.wing + 6) : 0)
+        let width = ui.notchWidth + (agents.hasActivity || forges.hasAttention ? 2 * (CollapsedView.wing + 6) : 0)
         return NSRect(x: f.midX - width / 2 - pad, y: f.maxY - ui.notchHeight - pad * 0.8,
                       width: width + 2 * pad, height: ui.notchHeight + pad * 0.8)
     }
@@ -166,18 +166,23 @@ final class NotchController {
         }
     }
 
-    /// Что открыть: GitLab или GitHub, если индикатор в свёрнутой челке показывает его, иначе сессии.
+    /// Что открыть: GitLab или GitHub, если индикатор в свёрнутой челке показывает его, иначе сессии
+    /// самого занятого агента (или первого подключённого).
     private func openingTab() -> NotchTab {
-        guard !store.hasActivity, let top = forges.attentionStore, let kind = top.attentionKind else { return .sessions }
+        guard !agents.hasActivity, let top = forges.attentionStore, let kind = top.attentionKind else { return .sessions(sessionsAgent) }
         ui.selectedMR = top.snapshot?.all.first { top.attention[$0.id] == kind }?.id
         return kind.tab(top.forge)
     }
 
+    private var sessionsAgent: Agent {
+        agents.hasActivity ? agents.top.agent : agents.connected.first ?? .claude
+    }
+
     /// Ненадолго раскрыть челку (событие в сессии, GitLab или GitHub).
-    func peek(for seconds: TimeInterval, tab: NotchTab = .sessions, mergeRequest: String? = nil) {
+    func peek(for seconds: TimeInterval, tab: NotchTab = .sessions(.claude), mergeRequest: String? = nil) {
         guard !ui.isExpanded || peeking else { return }
         // Не уводить с запроса разрешения, который показывает челка.
-        if tab.source != .claude && peeking && store.topPhase == .permission { return }
+        if peeking, let shown = ui.tab.agent, tab != ui.tab, agents[shown].topPhase == .permission { return }
         peeking = true
         ui.tab = tab
         if let mergeRequest { ui.selectedMR = mergeRequest }
@@ -195,7 +200,7 @@ final class NotchController {
         peeking = false
         ui.tab = openingTab()
         ui.pinned = true
-        ui.selectedID = store.visibleSessions.first?.id
+        ui.selectedID = ui.tab.agent.flatMap { agents[$0].visibleSessions.first?.id }
         ui.isExpanded = true
         panel.allowsKey = true
         panel.ignoresMouseEvents = false
@@ -262,7 +267,7 @@ final class NotchController {
             return true
         case 123, 124: // ← → — источники; в поле ввода стрелки двигают курсор
             if panel.firstResponder is NSTextView { return false }
-            let sources = NotchSource.visible(forges: forges.configured)
+            let sources = NotchSource.visible(agents: agents.connected, forges: forges.configured)
             let i = sources.firstIndex(of: ui.tab.source) ?? 0
             ui.select(sources[(i + (keyCode == 123 ? sources.count - 1 : 1)) % sources.count])
             return true
@@ -270,6 +275,7 @@ final class NotchController {
             break
         }
         if let forge = ui.tab.forge { return handleMergeRequestKey(forges[forge], keyCode: keyCode, chars: chars) }
+        let store = agents[ui.tab.agent ?? .claude]
         let sessions = store.visibleSessions
         let index = sessions.firstIndex { $0.id == ui.selectedID }
         switch keyCode {

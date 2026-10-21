@@ -12,6 +12,7 @@ final class DemoRecorder {
     private(set) var isRunning = false
     /// Выдуманные данные: создаются на время сценария, настоящие сторы его не замечают.
     private var store: SessionStore!
+    private var agents: Agents!
     private var forges: Forges!
     private var gitlabSource: DemoForge!
     private var gitlab: MergeRequestStore { forges.gitlab }
@@ -41,10 +42,10 @@ final class DemoRecorder {
         if let language { defaults.set(language.rawValue, forKey: L10n.key) }
         let screen = NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main ?? NSScreen.screens[0]
         showBackdrop(on: screen)
-        let real = (store: notch.store, forges: notch.forges)
+        let real = (agents: notch.agents, forges: notch.forges)
         makeFakeState()
         notch.collapse()
-        notch.display(store: store, forges: forges)
+        notch.display(agents: agents, forges: forges)
         notch.scripted = true
 
         var process: Process?
@@ -70,8 +71,9 @@ final class DemoRecorder {
             guard let self else { return }
             self.notch.scripted = false
             self.notch.collapse()
-            self.notch.display(store: real.store, forges: real.forges)
+            self.notch.display(agents: real.agents, forges: real.forges)
             self.store = nil
+            self.agents = nil
             self.forges = nil
             self.gitlabSource = nil
             if language != nil { defaults.set(previousLanguage, forKey: L10n.key) }
@@ -140,6 +142,8 @@ final class DemoRecorder {
                              fiveHour: StatusInfo.Limit(percent: 42, resetsAt: now.addingTimeInterval(2 * 3600 + 900)),
                              sevenDay: StatusInfo.Limit(percent: 18, resetsAt: now.addingTimeInterval(4 * 86400)))
         store.hooksInstalled = true // без баннера «Подключите hooks»
+        // Codex в демо не подключён — его источника не видно.
+        agents = Agents(claude: store, codex: SessionStore(agent: .codex, persistent: false))
         gitlabSource = DemoForge(Self.gitlabSnapshot(later: false))
         // GitHub в демо не подключён: пустой токен — без обращения к связке ключей.
         forges = Forges(gitlab: MergeRequestStore(source: gitlabSource), github: MergeRequestStore(source: ForgeServer(.github, token: "")))
@@ -237,11 +241,11 @@ final class DemoRecorder {
             (2.2, { self.store.handle(ev(b, "UserPromptSubmit") { $0.prompt = L("Fix the failing auth test", "Почини падающий тест авторизации") })
                     self.store.handle(ev(b, "PreToolUse") { $0.activity = "$ npm test -- auth" })
                     status(b, ctx: 31, added: 4, removed: 1); metrics(b, task: 0.2, total: 2.9) }),
-            (3.6, { self.notch.show(tab: .sessions) }),
+            (3.6, { self.notch.show(tab: .sessions(.claude)) }),
             (4.6, { self.store.handle(ev(a, "PreToolUse") { $0.activity = "Read SettingsView.swift" })
                     self.store.handle(ev(a, "SubagentStart")) }),
             (6.0, { self.store.handle(ev(a, "PreToolUse") { $0.activity = "Edit Theme.swift"; $0.todos = todos(1) })
-                    self.store.handle(ev(a, "PostToolUse") { $0.filePath = cwdA + "/Theme.swift" })
+                    self.store.handle(ev(a, "PostToolUse") { $0.filePaths = [cwdA + "/Theme.swift"] })
                     status(a, ctx: 19, added: 24, removed: 3); metrics(a, task: 0.4, total: 1.7) }),
             (7.4, { self.store.handle(ev(a, "PermissionRequest") {
                         $0.toolName = "Edit"; $0.activity = "Edit SettingsView.swift"
@@ -250,7 +254,7 @@ final class DemoRecorder {
                         $0.permissionID = "demo-permission"
                     }) }),
             (11.8, { self.store.answer(.allow, sessionID: a) }),
-            (12.4, { self.store.handle(ev(a, "PostToolUse") { $0.filePath = cwdA + "/Sources/SettingsView.swift" })
+            (12.4, { self.store.handle(ev(a, "PostToolUse") { $0.filePaths = [cwdA + "/Sources/SettingsView.swift"] })
                      self.store.handle(ev(a, "PreToolUse") { $0.activity = L("Updating the plan", "Обновляет план"); $0.todos = todos(2) })
                      self.store.handle(ev(a, "SubagentStop")) }),
             (13.4, { self.store.handle(ev(b, "PermissionRequest") {
@@ -271,10 +275,10 @@ final class DemoRecorder {
                                           "Готово: в настройках появился переключатель «Тёмная тема», выбор сохраняется между запусками. Все 42 теста проходят.")
                      })
                      metrics(a, task: 1.1, total: 2.4) }),
-            (24.6, { self.notch.show(tab: .sessions) }),
-            (29.5, { self.notch.show(tab: .today) }),
-            (34.0, { self.notch.show(tab: .week) }),
-            (38.5, { self.notch.show(tab: .sessions) }),
+            (24.6, { self.notch.show(tab: .sessions(.claude)) }),
+            (29.5, { self.notch.show(tab: .today(.claude)) }),
+            (34.0, { self.notch.show(tab: .week(.claude)) }),
+            (38.5, { self.notch.show(tab: .sessions(.claude)) }),
             (40.5, { self.notch.collapse() }),
             (41.5, { self.store.handle(ev(b, "Stop") { $0.lastAnswer = L("Snapshot updated, auth tests pass.", "Снапшот обновлён, тесты авторизации проходят.") }) }),
             // GitLab: пока сессии ничего не делают, свёрнутая челка показывает новые события.

@@ -56,9 +56,11 @@ struct SessionMetrics: Sendable {
     var contextFraction: Double { Double(contextTokens) / Double(max(1, contextWindow)) }
 }
 
+/// Сессия агента в терминале (Claude Code или Codex).
 struct ClaudeSession: Identifiable {
     let id: String
     var cwd: String
+    var agent = Agent.claude
     var phase: Phase = .idle
     var activity: String?
     var prompt: String?
@@ -91,7 +93,7 @@ struct ClaudeSession: Identifiable {
     var project: String {
         if let custom = SessionLabels.name(for: cwd) { return custom }
         let name = (cwd as NSString).lastPathComponent
-        return name.isEmpty ? "Claude" : name
+        return name.isEmpty ? agent.title : name
     }
 
     var isPinned: Bool { SessionLabels.isPinned(cwd) }

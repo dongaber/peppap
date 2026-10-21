@@ -1,7 +1,8 @@
 import Foundation
 
-/// Событие хука Claude Code (уже разобранное, только значения — безопасно передавать между потоками).
+/// Событие хука Claude Code или Codex (уже разобранное, только значения — безопасно передавать между потоками).
 struct HookEvent: Sendable {
+    var agent = Agent.claude
     var name: String
     var sessionID: String
     var cwd: String
@@ -15,7 +16,8 @@ struct HookEvent: Sendable {
     var inputJSON: String?
     var diff: [DiffLine] = []
     var questions: [ClaudeQuestion] = []
-    var filePath: String?
+    /// Файлы, которые меняет инструмент (у apply_patch в Codex их бывает несколько).
+    var filePaths: [String] = []
     var todos: [TodoItem]?
     var createdTask: TodoItem?
     var updatedTask: (id: String, status: String?, title: String?)?
@@ -28,10 +30,11 @@ struct HookEvent: Sendable {
     /// Есть у PermissionRequest: соединение hook-скрипта ждёт ответа.
     var permissionID: String?
 
-    init?(body: Data, headers: [String: String]) {
+    init?(body: Data, headers: [String: String], agent: Agent = .claude) {
         guard let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
               let name = json["hook_event_name"] as? String,
               let sid = json["session_id"] as? String else { return nil }
+        self.agent = agent
         self.name = name
         sessionID = sid
         cwd = json["cwd"] as? String ?? ""
@@ -47,8 +50,9 @@ struct HookEvent: Sendable {
             let input = json["tool_input"] as? [String: Any] ?? [:]
             toolName = tool
             activity = Self.describe(tool: tool, input: input)
-            if ["Edit", "Write", "MultiEdit"].contains(tool) { filePath = input["file_path"] as? String }
-            if tool == "NotebookEdit" { filePath = input["notebook_path"] as? String }
+            if ["Edit", "Write", "MultiEdit"].contains(tool), let f = input["file_path"] as? String { filePaths = [f] }
+            if tool == "NotebookEdit", let f = input["notebook_path"] as? String { filePaths = [f] }
+            if tool == "apply_patch" { filePaths = Diff.patchFiles(Self.command(input)).map { Self.absolute($0, cwd: cwd) } }
             if tool == "AskUserQuestion" { questions = Self.questions(from: input) }
             if name == "PermissionRequest" {
                 permissionDetail = Self.detail(tool: tool, input: input)
@@ -91,6 +95,11 @@ struct HookEvent: Sendable {
             let id = (task?["id"] as? String) ?? (task?["id"] as? NSNumber)?.stringValue ?? ""
             createdTask = TodoItem(id: id, title: input["subject"] as? String ?? "", active: input["activeForm"] as? String,
                                    status: "pending")
+        case "update_plan" where name == "PreToolUse": // план Codex
+            let list = input["plan"] as? [[String: Any]] ?? []
+            todos = list.enumerated().map { i, t in
+                TodoItem(id: "\(i)", title: t["step"] as? String ?? "", active: nil, status: t["status"] as? String ?? "pending")
+            }
         case "TaskUpdate" where name == "PostToolUse":
             if let id = (input["taskId"] as? String) ?? (input["taskId"] as? NSNumber)?.stringValue {
                 updatedTask = (id, input["status"] as? String, input["subject"] as? String)
@@ -112,11 +121,25 @@ struct HookEvent: Sendable {
         }
     }
 
+    /// Команда Bash или текст патча. Codex может прислать команду массивом аргументов.
+    static func command(_ input: [String: Any]) -> String {
+        if let s = input["command"] as? String { return s }
+        return (input["command"] as? [String])?.joined(separator: " ") ?? ""
+    }
+
+    private static func absolute(_ path: String, cwd: String) -> String {
+        path.hasPrefix("/") || cwd.isEmpty ? path : (cwd as NSString).appendingPathComponent(path)
+    }
+
     static func describe(tool: String, input: [String: Any]) -> String {
         func str(_ key: String) -> String? { (input[key] as? String)?.nilIfEmpty }
         func file(_ key: String) -> String { str(key).map { ($0 as NSString).lastPathComponent } ?? "" }
         switch tool {
-        case "Bash": return "$ " + (str("command") ?? "").oneLine(limit: 80)
+        case "Bash": return "$ " + command(input).oneLine(limit: 80)
+        case "apply_patch":
+            let files = Diff.patchFiles(command(input)).map { ($0 as NSString).lastPathComponent }
+            return "Edit " + (files.count > 2 ? files.prefix(2).joined(separator: ", ") + " +\(files.count - 2)" : files.joined(separator: ", "))
+        case "update_plan": return L("Updating the plan", "Обновляет план")
         case "Read", "Edit", "Write", "MultiEdit": return "\(tool) \(file("file_path"))"
         case "NotebookEdit": return "\(tool) \(file("notebook_path"))"
         case "Grep", "Glob": return "\(tool) \(str("pattern") ?? "")"
@@ -136,7 +159,8 @@ struct HookEvent: Sendable {
         func str(_ key: String) -> String? { (input[key] as? String)?.nilIfEmpty }
         let text: String
         switch tool {
-        case "Bash": text = str("command") ?? ""
+        case "Bash": text = command(input)
+        case "apply_patch": text = Diff.patchFiles(command(input)).map { ($0 as NSString).abbreviatingWithTildeInPath }.joined(separator: ", ")
         case "Read", "Edit", "Write", "MultiEdit": text = (str("file_path") as NSString?)?.abbreviatingWithTildeInPath ?? ""
         case "NotebookEdit": text = (str("notebook_path") as NSString?)?.abbreviatingWithTildeInPath ?? ""
         case "WebFetch": text = str("url") ?? ""
