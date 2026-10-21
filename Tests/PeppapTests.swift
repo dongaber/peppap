@@ -25,6 +25,7 @@ enum PeppapTests {
             ("Codex", codexTests),
             ("Codex cost", codexCostTests),
             ("Agents today", agentsTodayTests),
+            ("Agent detection", agentDetectionTests),
         ])
     }
 }

@@ -36,10 +36,10 @@ enum NotchSource: Int, CaseIterable {
 
     var tabs: [NotchTab] { NotchTab.allCases.filter { $0.source == self } }
 
-    /// Только подключённые агенты и настроенные сервисы. Пока не подключён ни один агент, виден Claude —
-    /// там баннер подключения.
-    static func visible(agents: [Agent], forges: [Forge]) -> [NotchSource] {
-        let shown = agents.isEmpty ? [Agent.claude] : agents
+    /// Только подключённые агенты и настроенные сервисы. Пока не подключён ни один агент, видны установленные
+    /// (`offered`) — у них баннер подключения.
+    static func visible(agents: [Agent], forges: [Forge], offered: [Agent] = [.claude]) -> [NotchSource] {
+        let shown = agents.isEmpty ? (offered.isEmpty ? [.claude] : offered) : agents
         return allCases.filter { source in
             if let a = source.agent { return shown.contains(a) }
             return source.forge.map(forges.contains) ?? false

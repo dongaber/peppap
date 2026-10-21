@@ -242,3 +242,31 @@ let agentsTodayTests: [(String, @MainActor () throws -> Void)] = [
         expectEqual(agents.today.tokens, 1000) // неподключённый агент не считается
     }),
 ]
+
+let agentDetectionTests: [(String, @MainActor () throws -> Void)] = [
+    ("какие агенты установлены", {
+        try withTempDir { home in
+            let saved = HookInstaller.home
+            HookInstaller.home = home
+            defer { HookInstaller.home = saved }
+            let fm = FileManager.default
+            // В /opt/homebrew/bin и /usr/local/bin могут лежать настоящие claude и codex — проверяем только домашние признаки.
+            let systemClaude = ["/opt/homebrew/bin/claude", "/usr/local/bin/claude"].contains(where: fm.isExecutableFile)
+            let systemCodex = ["/opt/homebrew/bin/codex", "/usr/local/bin/codex"].contains(where: fm.isExecutableFile)
+            expectEqual(Agent.codex.isInstalled, systemCodex)
+            try fm.createDirectory(at: home.appendingPathComponent(".codex"), withIntermediateDirectories: true)
+            expect(Agent.codex.isInstalled)
+            let bin = home.appendingPathComponent(".local/bin")
+            try fm.createDirectory(at: bin, withIntermediateDirectories: true)
+            expectEqual(Agent.claude.isInstalled, systemClaude)
+            fm.createFile(atPath: bin.appendingPathComponent("claude").path, contents: Data(), attributes: [.posixPermissions: 0o755])
+            expect(Agent.claude.isInstalled)
+            expectEqual(Agent.offered, [.claude, .codex])
+        }
+    }),
+    ("до подключения видны установленные агенты", {
+        expectEqual(NotchSource.visible(agents: [], forges: [], offered: [.codex]), [.codex])
+        expectEqual(NotchSource.visible(agents: [], forges: [.gitlab], offered: [.claude, .codex]), [.claude, .codex, .gitlab])
+        expectEqual(NotchSource.visible(agents: [.claude], forges: [], offered: [.claude, .codex]), [.claude]) // подключённые важнее
+    }),
+]
